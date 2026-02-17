@@ -1,5 +1,5 @@
 /**
- * NH Earth v12 - Zoom in for bigger pin + 6 diverse angles
+ * NH Earth v13 - Back to working version
  */
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -11,7 +11,7 @@ async function main() {
   const outDir = './screenshots';
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n🌍 NH Earth v12\n📍 ${lat}, ${lng}\n`);
+  console.log(`\n🌍 NH Earth v13\n📍 ${lat}, ${lng}\n`);
 
   const browser = await chromium.launch({
     headless: true,
@@ -47,11 +47,6 @@ async function main() {
   await page.mouse.click(100, 700);
   await page.waitForTimeout(1000);
 
-// Tiny zoom in for slightly bigger pin
-  console.log(`[3] Zooming in slightly...`);
-  await page.mouse.wheel(0, -150);
-  await page.waitForTimeout(2000);
-  
   // Helper: tilt
   async function tilt(upPixels) {
     const cx = 960, cy = 540;
@@ -81,19 +76,19 @@ async function main() {
   }
 
   // === VIEW 1: 2D top-down ===
-  console.log(`[4] View 1: 2D top-down...`);
+  console.log(`[3] View 1: 2D top-down...`);
   await page.screenshot({ path: path.join(outDir, '01_2d_top.png') });
   console.log(`    ✅ 01_2d_top.png`);
 
   // === VIEW 2: Light tilt ===
-  console.log(`[5] View 2: Light tilt...`);
+  console.log(`[4] View 2: Light tilt...`);
   await tilt(150);
   await page.waitForTimeout(5000);
   await page.screenshot({ path: path.join(outDir, '02_3d_overview.png') });
   console.log(`    ✅ 02_3d_overview.png`);
 
   // === VIEW 3: Strong tilt + rotate right ===
-  console.log(`[6] View 3: Strong tilt + rotate...`);
+  console.log(`[5] View 3: Strong tilt + rotate...`);
   await tilt(120);
   await rotate(250);
   await page.waitForTimeout(5000);
@@ -101,14 +96,14 @@ async function main() {
   console.log(`    ✅ 03_3d_dramatic_right.png`);
 
   // === VIEW 4: Rotate to opposite side ===
-  console.log(`[7] View 4: Opposite side...`);
+  console.log(`[6] View 4: Opposite side...`);
   await rotate(350);
   await page.waitForTimeout(5000);
   await page.screenshot({ path: path.join(outDir, '04_3d_dramatic_back.png') });
   console.log(`    ✅ 04_3d_dramatic_back.png`);
 
   // === VIEW 5: More rotate + more tilt ===
-  console.log(`[8] View 5: Very dramatic angle...`);
+  console.log(`[7] View 5: Very dramatic angle...`);
   await rotate(250);
   await tilt(80);
   await page.waitForTimeout(5000);
@@ -116,7 +111,7 @@ async function main() {
   console.log(`    ✅ 05_3d_dramatic_left.png`);
 
   // === VIEW 6: Final rotate ===
-  console.log(`[9] View 6: Final angle...`);
+  console.log(`[8] View 6: Final angle...`);
   await rotate(300);
   await page.waitForTimeout(5000);
   await page.screenshot({ path: path.join(outDir, '06_3d_final.png') });
