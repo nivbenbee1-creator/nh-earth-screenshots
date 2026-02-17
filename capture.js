@@ -1,5 +1,5 @@
 /**
- * NH Earth v8 - Shift+drag for 3D tilt
+ * NH Earth v9 - Smart popup + Shift+drag for 3D tilt
  */
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -11,7 +11,7 @@ async function main() {
   const outDir = './screenshots';
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n🌍 NH Earth v8\n📍 ${lat}, ${lng}\n`);
+  console.log(`\n🌍 NH Earth v9\n📍 ${lat}, ${lng}\n`);
 
   const browser = await chromium.launch({
     headless: true,
@@ -36,27 +36,40 @@ async function main() {
   console.log(`[2] Waiting 15s...`);
   await page.waitForTimeout(15000);
 
-// Dismiss banners and popups, but NOT the info card
+  // Dismiss "Find and manage all your projects" banner
   try {
     const d = page.locator('text=Dismiss').first();
-    if (await d.isVisible({ timeout: 1000 })) await d.click();
+    if (await d.isVisible({ timeout: 1000 })) {
+      await d.click();
+      console.log(`[3] Dismissed banner`);
+    }
   } catch {}
   await page.waitForTimeout(500);
-  // Close "New from Google Earth" popup X button
+
+  // Smart popup handling: wait for dialog, close it if it appears
+  console.log(`[3] Waiting for popup...`);
   try {
-    const popup = page.locator('[aria-label="Close"]').first();
-    if (await popup.isVisible({ timeout: 1500 })) await popup.click();
-    console.log('    Closed popup');
-  } catch {}
+    const dialog = page.locator('[role="dialog"], .modal, [class*="dialog"]').first();
+    await dialog.waitFor({ state: 'visible', timeout: 8000 });
+    console.log(`    Popup found! Looking for X...`);
+    const closeBtn = dialog.locator('button').first();
+    await closeBtn.click();
+    console.log(`    Closed popup`);
+  } catch {
+    console.log(`    No popup appeared, continuing`);
+  }
   await page.waitForTimeout(1000);
 
+  // Screenshot 2D
+  await page.screenshot({ path: path.join(outDir, '01_2d.png') });
+  console.log(`[4] ✅ 01_2d.png`);
+
   // Tilt to 3D using Shift + mouse drag (drag UP = tilt forward)
-  console.log(`[4] Tilting to 3D with Shift+drag...`);
-  const cx = 960, cy = 540; // center of screen
+  console.log(`[5] Tilting to 3D with Shift+drag...`);
+  const cx = 960, cy = 540;
   await page.mouse.move(cx, cy);
   await page.keyboard.down('Shift');
   await page.mouse.down();
-  // Drag upward slowly (100px up in 10 steps)
   for (let i = 0; i < 10; i++) {
     await page.mouse.move(cx, cy - (i * 15));
     await page.waitForTimeout(50);
@@ -64,13 +77,13 @@ async function main() {
   await page.mouse.up();
   await page.keyboard.up('Shift');
 
-  console.log(`[5] Waiting 5s for 3D render...`);
+  console.log(`[6] Waiting 5s for 3D render...`);
   await page.waitForTimeout(5000);
   await page.screenshot({ path: path.join(outDir, '02_3d_tilt1.png') });
-  console.log(`[5] ✅ 02_3d_tilt1.png`);
+  console.log(`[6] ✅ 02_3d_tilt1.png`);
 
   // More tilt
-  console.log(`[6] More tilt...`);
+  console.log(`[7] More tilt...`);
   await page.mouse.move(cx, cy);
   await page.keyboard.down('Shift');
   await page.mouse.down();
@@ -83,10 +96,10 @@ async function main() {
 
   await page.waitForTimeout(5000);
   await page.screenshot({ path: path.join(outDir, '03_3d_tilt2.png') });
-  console.log(`[6] ✅ 03_3d_tilt2.png`);
+  console.log(`[7] ✅ 03_3d_tilt2.png`);
 
-  // Rotate view (drag horizontally with middle mouse or Shift)
-  console.log(`[7] Rotating...`);
+  // Rotate view
+  console.log(`[8] Rotating...`);
   await page.mouse.move(cx, cy);
   await page.keyboard.down('Shift');
   await page.mouse.down();
@@ -99,7 +112,7 @@ async function main() {
 
   await page.waitForTimeout(5000);
   await page.screenshot({ path: path.join(outDir, '04_3d_rotated.png') });
-  console.log(`[7] ✅ 04_3d_rotated.png`);
+  console.log(`[8] ✅ 04_3d_rotated.png`);
 
   await browser.close();
   console.log(`\n✅ Done!`);
