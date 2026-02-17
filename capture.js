@@ -1,5 +1,5 @@
 /**
- * NH Earth v13 - Working version, faster waits
+ * NH Earth v13 - Working version, 3s waits
  */
 const { chromium } = require('playwright');
 const fs = require('fs');
