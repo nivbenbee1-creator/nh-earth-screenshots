@@ -26,12 +26,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Cache Playwright
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-
       - name: Install dependencies
         run: |
           npm install
@@ -40,24 +34,15 @@ jobs:
       - name: Capture screenshots
         run: node capture.js "${{ inputs.lat }}" "${{ inputs.lng }}"
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        id: upload
-        with:
-          name: earth-screenshots
-          path: ./screenshots/
-          retention-days: 7
-
-      - name: Notify n8n
+      - name: Send all images to n8n
         if: success()
         run: |
-          curl -X POST "https://bennivbee.app.n8n.cloud/webhook/nh-google-earth" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "status": "done",
-              "lat": "${{ inputs.lat }}",
-              "lng": "${{ inputs.lng }}",
-              "run_id": "${{ github.run_id }}",
-              "artifact_id": "${{ steps.upload.outputs.artifact-id }}",
-              "artifact_url": "https://api.github.com/repos/nivbenbee1-creator/nh-earth-screenshots/actions/artifacts/${{ steps.upload.outputs.artifact-id }}/zip"
-            }'
+          CMD="curl -X POST https://bennivbee.app.n8n.cloud/webhook/nh-google-earth"
+          CMD="$CMD -F lat=${{ inputs.lat }}"
+          CMD="$CMD -F lng=${{ inputs.lng }}"
+          for f in ./screenshots/*.png; do
+            FILENAME=$(basename "$f")
+            CMD="$CMD -F $FILENAME=@$f"
+          done
+          echo "Sending all images..."
+          eval $CMD
