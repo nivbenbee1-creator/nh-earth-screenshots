@@ -47,14 +47,11 @@ async function main() {
   await page.mouse.click(100, 700);
   await page.waitForTimeout(1000);
 
-  // Zoom in a bit for bigger pin
-  console.log(`[3] Zooming in...`);
-  for (let i = 0; i < 5; i++) {
-    await page.mouse.wheel(0, -300);
-    await page.waitForTimeout(300);
-  }
-  await page.waitForTimeout(3000);
-
+// Tiny zoom in for slightly bigger pin
+  console.log(`[3] Zooming in slightly...`);
+  await page.mouse.wheel(0, -150);
+  await page.waitForTimeout(2000);
+  
   // Helper: tilt
   async function tilt(upPixels) {
     const cx = 960, cy = 540;
