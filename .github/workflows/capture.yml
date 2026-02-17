@@ -6,11 +6,11 @@ on:
       lat:
         description: 'Latitude'
         required: true
-        default: '36.39989338'
+        default: '30.4236'
       lng:
         description: 'Longitude'
         required: true
-        default: '-105.57340046'
+        default: '-83.12435'
 
 jobs:
   capture:
