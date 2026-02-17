@@ -36,14 +36,11 @@ async function main() {
   console.log(`[2] Waiting 15s...`);
   await page.waitForTimeout(15000);
 
-  // Dismiss
+  // Dismiss only the banner, NOT the info card (keeps the pin!)
   try {
     const d = page.locator('text=Dismiss').first();
     if (await d.isVisible({ timeout: 1000 })) await d.click();
   } catch {}
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(500);
-  await page.keyboard.press('Escape');
   await page.waitForTimeout(1000);
 
   // Screenshot 2D
