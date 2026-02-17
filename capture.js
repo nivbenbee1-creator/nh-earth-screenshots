@@ -36,16 +36,19 @@ async function main() {
   console.log(`[2] Waiting 15s...`);
   await page.waitForTimeout(15000);
 
-  // Dismiss only the banner, NOT the info card (keeps the pin!)
+// Dismiss banners and popups, but NOT the info card
   try {
     const d = page.locator('text=Dismiss').first();
     if (await d.isVisible({ timeout: 1000 })) await d.click();
   } catch {}
+  await page.waitForTimeout(500);
+  // Close "New from Google Earth" popup X button
+  try {
+    const popup = page.locator('[aria-label="Close"]').first();
+    if (await popup.isVisible({ timeout: 1500 })) await popup.click();
+    console.log('    Closed popup');
+  } catch {}
   await page.waitForTimeout(1000);
-
-  // Screenshot 2D
-  await page.screenshot({ path: path.join(outDir, '01_2d.png') });
-  console.log(`[3] ✅ 01_2d.png`);
 
   // Tilt to 3D using Shift + mouse drag (drag UP = tilt forward)
   console.log(`[4] Tilting to 3D with Shift+drag...`);
