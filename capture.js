@@ -1,10 +1,9 @@
 /**
- * NH Real Estate - Google Earth 3D Screenshot Capture v4
+ * NH Real Estate - Google Earth 3D Screenshot Capture v5
  * ======================================================
- * Based on v1 (which WORKED). Minimal changes:
- * - Only Escape key for popup dismissal
- * - NO UI hiding (v2/v3 broke by hiding the globe itself)
- * - Slightly closer zoom than v1
+ * KEY FIX: Google Earth Web requires:
+ * 1. Click on screen to activate 3D view (otherwise black)
+ * 2. Scroll zoom-out (URL distance param is ignored)
  */
 
 const { chromium } = require('playwright');
@@ -35,36 +34,48 @@ function parseArgs() {
   return opts;
 }
 
-// ─── CAMERA VIEWS ───
-function calcViews(lat, lng, acres) {
-  const side = Math.sqrt(acres * 4047);
-  const d = side * 3.5;                  // v1 was *5 (too far), trying *3.5
+// ─── ZOOM CALCULATION ───
+// How many scroll-up steps needed based on acreage
+// More acres = more zoom out needed
+function calcZoomSteps(acres) {
+  if (acres <= 1) return 15;
+  if (acres <= 5) return 20;
+  if (acres <= 20) return 25;
+  if (acres <= 50) return 28;
+  if (acres <= 100) return 32;
+  return 35;
+}
 
+// ─── CAMERA VIEWS ───
+function getViews() {
   return [
-    { id: '01_topdown_close', label: 'Top-Down Close',         d: d,       h: 0,   t: 0,  fov: 35 },
-    { id: '02_topdown_wide',  label: 'Top-Down Wide',          d: d * 3,   h: 0,   t: 0,  fov: 35 },
-    { id: '03_north',         label: '3D from North',          d: d * 1.3, h: 0,   t: 65, fov: 35 },
-    { id: '04_east',          label: '3D from East',           d: d * 1.3, h: 90,  t: 65, fov: 35 },
-    { id: '05_south',         label: '3D from South',          d: d * 1.3, h: 180, t: 65, fov: 35 },
-    { id: '06_west',          label: '3D from West',           d: d * 1.3, h: 270, t: 65, fov: 35 },
-    { id: '07_cinematic',     label: 'Cinematic Low Angle',    d: d * 0.7, h: 45,  t: 75, fov: 50 },
-    { id: '08_context',       label: 'High Altitude Context',  d: d * 8,   h: 0,   t: 30, fov: 35 },
+    { id: '01_topdown_close', label: 'Top-Down Close',       zoomAdj: 0,  h: 0,   t: 0  },
+    { id: '02_topdown_wide',  label: 'Top-Down Wide',        zoomAdj: 8,  h: 0,   t: 0  },
+    { id: '03_north',         label: '3D from North',        zoomAdj: 2,  h: 0,   t: 65 },
+    { id: '04_east',          label: '3D from East',         zoomAdj: 2,  h: 90,  t: 65 },
+    { id: '05_south',         label: '3D from South',        zoomAdj: 2,  h: 180, t: 65 },
+    { id: '06_west',          label: '3D from West',         zoomAdj: 2,  h: 270, t: 65 },
+    { id: '07_cinematic',     label: 'Cinematic Low Angle',  zoomAdj: -3, h: 45,  t: 75 },
+    { id: '08_context',       label: 'High Altitude Context',zoomAdj: 15, h: 0,   t: 30 },
   ];
 }
 
-function earthUrl(lat, lng, v) {
-  return `https://earth.google.com/web/@${lat},${lng},0a,${Math.round(v.d)}d,${v.fov}y,${v.h}h,${v.t}t,0r`;
+function earthUrl(lat, lng, heading, tilt) {
+  // Use large distance in URL as starting point, but real zoom comes from scroll
+  return `https://earth.google.com/web/@${lat},${lng},500a,2000d,35y,${heading}h,${tilt}t,0r`;
 }
 
 // ─── MAIN CAPTURE ───
 async function main() {
   const opts = parseArgs();
-  const views = calcViews(opts.lat, opts.lng, opts.acres);
+  const views = getViews();
+  const baseZoom = calcZoomSteps(opts.acres);
   const outDir = path.resolve(opts.output);
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n🌍 NH Earth Capture v4 — GitHub Actions`);
+  console.log(`\n🌍 NH Earth Capture v5 — GitHub Actions`);
   console.log(`📍 ${opts.lat}, ${opts.lng} | ${opts.acres} acres`);
+  console.log(`🔍 Base zoom steps: ${baseZoom}`);
   console.log(`📁 ${outDir} | ⏱ ${opts.wait}s per view\n`);
 
   const browser = await chromium.launch({
@@ -93,36 +104,52 @@ async function main() {
   const results = [];
   let successCount = 0;
 
+  const centerX = opts.width / 2;
+  const centerY = opts.height / 2;
+
   for (let i = 0; i < views.length; i++) {
     const v = views[i];
-    const url = earthUrl(opts.lat, opts.lng, v);
+    const url = earthUrl(opts.lat, opts.lng, v.h, v.t);
     const filename = `${v.id}.png`;
     const filepath = path.join(outDir, filename);
+    const totalZoom = baseZoom + v.zoomAdj;
 
-    process.stdout.write(`  [${i + 1}/${views.length}] ${v.label} (d=${Math.round(v.d)}m)... `);
+    process.stdout.write(`  [${i + 1}/${views.length}] ${v.label} (zoom: ${totalZoom} steps)... `);
 
     try {
+      // Step 1: Navigate
       await page.goto(url, { 
         waitUntil: 'domcontentloaded', 
         timeout: 30000 
       });
 
-      // SAFE popup dismissal: only Escape key
-      // (v2 broke by clicking nav buttons, v3 broke by hiding the globe)
-      await page.waitForTimeout(3000);
+      // Step 2: Wait for page to load
+      await page.waitForTimeout(5000);
+
+      // Step 3: Dismiss popups with Escape
       await page.keyboard.press('Escape');
       await page.waitForTimeout(500);
       await page.keyboard.press('Escape');
       await page.waitForTimeout(500);
 
-      // Wait for 3D scene to render
+      // Step 4: CLICK on center to activate 3D view!
+      await page.mouse.click(centerX, centerY);
+      await page.waitForTimeout(2000);
+
+      // Step 5: ZOOM OUT by scrolling up
+      for (let z = 0; z < totalZoom; z++) {
+        await page.mouse.wheel(0, -300);  // negative = zoom out
+        await page.waitForTimeout(150);
+      }
+
+      // Step 6: Wait for 3D to render at new zoom level
       await page.waitForTimeout(opts.wait * 1000);
 
-      // One more Escape in case popup reappeared
+      // Step 7: One more Escape for any popups
       await page.keyboard.press('Escape');
       await page.waitForTimeout(500);
 
-      // Screenshot - NO UI hiding, just capture as-is
+      // Step 8: Screenshot
       await page.screenshot({ path: filepath, fullPage: false });
       
       const sizeKB = Math.round(fs.statSync(filepath).size / 1024);
@@ -134,7 +161,7 @@ async function main() {
         filename,
         url,
         size_kb: sizeKB,
-        camera: { distance: Math.round(v.d), heading: v.h, tilt: v.t, fov: v.fov },
+        zoom_steps: totalZoom,
       });
       successCount++;
 
