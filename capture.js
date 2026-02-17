@@ -46,22 +46,11 @@ async function main() {
   } catch {}
   await page.waitForTimeout(500);
 
-// Smart popup handling
-  console.log(`[3] Waiting for popup...`);
-  try {
-    const popup = page.locator('text=New from Google Earth').first();
-    await popup.waitFor({ state: 'visible', timeout: 8000 });
-    console.log(`    Popup found!`);
-    // Find the X button near the popup title
-    const container = popup.locator('xpath=ancestor::*[.//button]').first();
-    const closeBtn = container.locator('button').first();
-    await closeBtn.click();
-    console.log(`    Closed popup`);
-  } catch {
-    console.log(`    No popup appeared, continuing`);
-  }
+// Close popup by clicking outside it (on the map)
+  console.log(`[3] Closing popup...`);
+  await page.mouse.click(100, 700);
   await page.waitForTimeout(1000);
-  
+
   // Screenshot 2D
   await page.screenshot({ path: path.join(outDir, '01_2d.png') });
   console.log(`[4] ✅ 01_2d.png`);
