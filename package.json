@@ -1,0 +1,16 @@
+{
+  "name": "nh-earth-screenshots",
+  "version": "1.0.0",
+  "description": "NH Real Estate - Google Earth 3D Screenshot Automation via GitHub Actions",
+  "scripts": {
+    "capture": "node capture.js",
+    "test": "node capture.js --lat 36.4072 --lng -105.5734 --acres 5 --name test"
+  },
+  "dependencies": {
+    "playwright-core": "^1.50.0",
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.50.0"
+  }
+}
