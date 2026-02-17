@@ -1,0 +1,105 @@
+name: NH Earth Screenshots
+
+on:
+  # Triggered by n8n via webhook
+  repository_dispatch:
+    types: [capture_parcel]
+  
+  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      lat:
+        description: 'Latitude'
+        required: true
+        default: '36.4072'
+      lng:
+        description: 'Longitude'
+        required: true
+        default: '-105.5734'
+      acres:
+        description: 'Acreage'
+        required: true
+        default: '5'
+      parcel_name:
+        description: 'Parcel name (folder name in Drive)'
+        required: true
+        default: 'Test_Parcel'
+      drive_folder_id:
+        description: 'Google Drive folder ID for upload'
+        required: true
+        default: ''
+      callback_url:
+        description: 'n8n webhook URL to call when done'
+        required: false
+        default: ''
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npx playwright install chromium --with-deps
+
+      - name: Set variables
+        id: vars
+        run: |
+          # From repository_dispatch (n8n) or workflow_dispatch (manual)
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "lat=${{ github.event.client_payload.lat }}" >> $GITHUB_OUTPUT
+            echo "lng=${{ github.event.client_payload.lng }}" >> $GITHUB_OUTPUT
+            echo "acres=${{ github.event.client_payload.acres }}" >> $GITHUB_OUTPUT
+            echo "parcel_name=${{ github.event.client_payload.parcel_name }}" >> $GITHUB_OUTPUT
+            echo "drive_folder_id=${{ github.event.client_payload.drive_folder_id }}" >> $GITHUB_OUTPUT
+            echo "callback_url=${{ github.event.client_payload.callback_url }}" >> $GITHUB_OUTPUT
+          else
+            echo "lat=${{ inputs.lat }}" >> $GITHUB_OUTPUT
+            echo "lng=${{ inputs.lng }}" >> $GITHUB_OUTPUT
+            echo "acres=${{ inputs.acres }}" >> $GITHUB_OUTPUT
+            echo "parcel_name=${{ inputs.parcel_name }}" >> $GITHUB_OUTPUT
+            echo "drive_folder_id=${{ inputs.drive_folder_id }}" >> $GITHUB_OUTPUT
+            echo "callback_url=${{ inputs.callback_url }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Capture Google Earth screenshots
+        run: |
+          node capture.js \
+            --lat "${{ steps.vars.outputs.lat }}" \
+            --lng "${{ steps.vars.outputs.lng }}" \
+            --acres "${{ steps.vars.outputs.acres }}" \
+            --name "${{ steps.vars.outputs.parcel_name }}" \
+            --output "./screenshots"
+
+      - name: Upload to Google Drive
+        if: steps.vars.outputs.drive_folder_id != ''
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+          DRIVE_FOLDER_ID: ${{ steps.vars.outputs.drive_folder_id }}
+          PARCEL_NAME: ${{ steps.vars.outputs.parcel_name }}
+        run: node upload-to-drive.js
+
+      - name: Callback to n8n
+        if: steps.vars.outputs.callback_url != ''
+        run: |
+          curl -X POST "${{ steps.vars.outputs.callback_url }}" \
+            -H "Content-Type: application/json" \
+            -d @./screenshots/manifest.json
+
+      - name: Upload artifacts (backup)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: earth-screenshots-${{ steps.vars.outputs.parcel_name }}
+          path: ./screenshots/
+          retention-days: 7
