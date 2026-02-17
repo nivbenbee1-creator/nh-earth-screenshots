@@ -6,11 +6,11 @@ on:
       lat:
         description: 'Latitude'
         required: true
-        default: '30.4236'
+        default: '36.39989338'
       lng:
         description: 'Longitude'
         required: true
-        default: '-83.12435'
+        default: '-105.57340046'
 
 jobs:
   capture:
@@ -25,10 +25,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+
+      - name: Cache Playwright
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: Install dependencies
         run: |
-          npm install
+          npm ci || npm install
           npx playwright install chromium --with-deps
 
       - name: Capture screenshots
@@ -36,8 +43,22 @@ jobs:
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
-        if: always()
+        id: upload
         with:
-          name: earth-test
+          name: earth-screenshots
           path: ./screenshots/
           retention-days: 7
+
+      - name: Notify n8n
+        if: success()
+        run: |
+          curl -X POST "https://bennivbee.app.n8n.cloud/webhook/nh-google-earth" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "status": "done",
+              "lat": "${{ inputs.lat }}",
+              "lng": "${{ inputs.lng }}",
+              "run_id": "${{ github.run_id }}",
+              "artifact_id": "${{ steps.upload.outputs.artifact-id }}",
+              "artifact_url": "https://api.github.com/repos/nivbenbee1-creator/nh-earth-screenshots/actions/artifacts/${{ steps.upload.outputs.artifact-id }}/zip"
+            }'
