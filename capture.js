@@ -1,7 +1,8 @@
 /**
- * NH Real Estate - Google Earth 3D Screenshot Capture v2
+ * NH Real Estate - Google Earth 3D Screenshot Capture v3
  * ======================================================
- * Fixed: popup dismissal, zoom levels, UI hiding
+ * Fixed: only dismiss popups (don't click nav buttons),
+ * safer UI hiding, better zoom calibration
  */
 
 const { chromium } = require('playwright');
@@ -17,7 +18,7 @@ function parseArgs() {
     acres: 5,
     name: 'parcel',
     output: './screenshots',
-    wait: 18,         // increased wait for better render
+    wait: 18,
     width: 1920,
     height: 1080,
   };
@@ -35,17 +36,17 @@ function parseArgs() {
 // ─── CAMERA VIEWS ───
 function calcViews(lat, lng, acres) {
   const side = Math.sqrt(acres * 4047); // parcel side in meters
-  const d = side * 2.5;                  // CLOSER zoom (was *5)
+  const d = side * 3.5;                  // balanced zoom (v1 was 5, v2 was 2.5)
 
   return [
     { id: '01_topdown_close', label: 'Top-Down Close',         d: d,       h: 0,   t: 0,  fov: 35 },
     { id: '02_topdown_wide',  label: 'Top-Down Wide',          d: d * 3,   h: 0,   t: 0,  fov: 35 },
-    { id: '03_north',         label: '3D from North',          d: d * 1.2, h: 0,   t: 65, fov: 35 },
-    { id: '04_east',          label: '3D from East',           d: d * 1.2, h: 90,  t: 65, fov: 35 },
-    { id: '05_south',         label: '3D from South',          d: d * 1.2, h: 180, t: 65, fov: 35 },
-    { id: '06_west',          label: '3D from West',           d: d * 1.2, h: 270, t: 65, fov: 35 },
-    { id: '07_cinematic',     label: 'Cinematic Low Angle',    d: d * 0.6, h: 45,  t: 75, fov: 50 },
-    { id: '08_context',       label: 'High Altitude Context',  d: d * 6,   h: 0,   t: 30, fov: 35 },
+    { id: '03_north',         label: '3D from North',          d: d * 1.3, h: 0,   t: 65, fov: 35 },
+    { id: '04_east',          label: '3D from East',           d: d * 1.3, h: 90,  t: 65, fov: 35 },
+    { id: '05_south',         label: '3D from South',          d: d * 1.3, h: 180, t: 65, fov: 35 },
+    { id: '06_west',          label: '3D from West',           d: d * 1.3, h: 270, t: 65, fov: 35 },
+    { id: '07_cinematic',     label: 'Cinematic Low Angle',    d: d * 0.7, h: 45,  t: 75, fov: 50 },
+    { id: '08_context',       label: 'High Altitude Context',  d: d * 8,   h: 0,   t: 30, fov: 35 },
   ];
 }
 
@@ -53,83 +54,79 @@ function earthUrl(lat, lng, v) {
   return `https://earth.google.com/web/@${lat},${lng},0a,${Math.round(v.d)}d,${v.fov}y,${v.h}h,${v.t}t,0r`;
 }
 
-// ─── DISMISS ALL POPUPS ───
+// ─── DISMISS POPUPS (SAFE - only close/dismiss, never navigate) ───
 async function dismissPopups(page) {
-  // Round 1: specific known popups
-  const dismissSelectors = [
-    // Close/X buttons
+  // ONLY click buttons that close/dismiss - NEVER navigation buttons
+  const safeSelectors = [
     'button[aria-label="Close"]',
     'button[aria-label="Dismiss"]',
     'button[aria-label="close"]',
-    
-    // "New from Google Earth" popup buttons
-    'button:has-text("See plans")',
-    'button:has-text("Explore data layers")',
-    
-    // General consent/welcome
     'button:has-text("Got it")',
     'button:has-text("OK")',
-    'button:has-text("Accept")',
     'button:has-text("I agree")',
     'button:has-text("No thanks")',
     'button:has-text("Skip")',
-    'button:has-text("Later")',
     'button:has-text("Not now")',
-    '[data-dismiss]',
+    'button:has-text("Later")',
   ];
 
-  for (const sel of dismissSelectors) {
+  for (const sel of safeSelectors) {
     try {
       const btn = page.locator(sel).first();
-      if (await btn.isVisible({ timeout: 800 })) {
+      if (await btn.isVisible({ timeout: 600 })) {
+        console.log(`      [popup] Clicking: ${sel}`);
         await btn.click();
-        await page.waitForTimeout(300);
+        await page.waitForTimeout(500);
       }
     } catch { /* ignore */ }
   }
 
-  // Round 2: close any modal/dialog overlay by clicking X or pressing Escape
+  // Press Escape to close any remaining dialogs
   try {
-    // Try clicking any visible close button inside dialogs
-    const closeButtons = page.locator('dialog button, [role="dialog"] button, .modal button').first();
-    if (await closeButtons.isVisible({ timeout: 500 })) {
-      await closeButtons.click();
-    }
-  } catch { /* ignore */ }
-
-  try {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
   } catch { /* ignore */ }
 }
 
-// ─── HIDE UI ELEMENTS ───
+// ─── HIDE UI (SAFE - target specific known elements, not broad patterns) ───
 async function hideUI(page) {
   await page.evaluate(() => {
-    // Hide by class patterns
-    const patterns = [
-      'search', 'toolbar', 'sidebar', 'panel', 'menu', 'compass',
-      'legend', 'footer', 'flyto', 'bottom', 'attribution', 'control',
-      'drawer', 'overlay', 'dialog', 'modal', 'banner', 'header',
-      'nav', 'topbar', 'chip', 'toast', 'snackbar', 'promo',
+    // Target SPECIFIC Google Earth UI elements only
+    // DO NOT hide broad patterns like 'overlay' or 'panel' - they contain the 3D view!
+    const selectorsToHide = [
+      // Google Earth specific UI
+      '.earth-search-bar',
+      '.gm-style-cc',                    // Google attribution
+      '[data-label="compass"]',
+      '[data-label="navigation"]',
+      
+      // Known UI bar areas
+      'header',
+      'nav:not([class*="earth"])',
     ];
-    
-    patterns.forEach(pattern => {
-      document.querySelectorAll(`[class*="${pattern}"]`).forEach(el => {
-        el.style.setProperty('display', 'none', 'important');
-      });
+
+    selectorsToHide.forEach(sel => {
+      try {
+        document.querySelectorAll(sel).forEach(el => {
+          el.style.setProperty('opacity', '0', 'important');
+        });
+      } catch {}
     });
 
-    // Hide by role
-    ['dialog', 'banner', 'navigation', 'complementary'].forEach(role => {
-      document.querySelectorAll(`[role="${role}"]`).forEach(el => {
-        el.style.setProperty('display', 'none', 'important');
-      });
-    });
-
-    // Hide specific Google Earth UI elements
-    document.querySelectorAll('header, nav, aside, .gm-style-cc').forEach(el => {
-      el.style.setProperty('display', 'none', 'important');
+    // Hide top bar and bottom bar by position (safer than class matching)
+    document.querySelectorAll('*').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      
+      // Fixed/absolute positioned elements at top or bottom edges (UI bars)
+      if ((style.position === 'fixed' || style.position === 'absolute') && 
+          el.children.length > 0 &&
+          (rect.top < 60 || rect.bottom > window.innerHeight - 60) &&
+          rect.width > window.innerWidth * 0.3) {
+        el.style.setProperty('opacity', '0', 'important');
+      }
     });
   });
   
@@ -143,7 +140,7 @@ async function main() {
   const outDir = path.resolve(opts.output);
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n🌍 NH Earth Capture v2 — GitHub Actions`);
+  console.log(`\n🌍 NH Earth Capture v3 — GitHub Actions`);
   console.log(`📍 ${opts.lat}, ${opts.lng} | ${opts.acres} acres`);
   console.log(`📁 ${outDir} | ⏱ ${opts.wait}s per view\n`);
 
@@ -159,8 +156,6 @@ async function main() {
       '--disable-setuid-sandbox',
       '--disable-background-timer-throttling',
       '--disable-renderer-backgrounding',
-      '--disable-features=TranslateUI',
-      '--disable-notifications',
       `--window-size=${opts.width},${opts.height}`,
     ],
   });
@@ -169,16 +164,49 @@ async function main() {
     viewport: { width: opts.width, height: opts.height },
     deviceScaleFactor: 2,
     userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    permissions: ['geolocation'],
   });
 
   const page = await ctx.newPage();
-  
-  // Block unnecessary requests to speed up loading
-  await page.route('**/*.{woff,woff2,ttf}', route => route.abort());
-
   const results = [];
   let successCount = 0;
+
+  // FIRST VIEW: extra wait + debug info
+  const firstUrl = earthUrl(opts.lat, opts.lng, views[0]);
+  console.log(`  [INIT] Loading Google Earth for first time...`);
+  console.log(`  [INIT] URL: ${firstUrl}`);
+  
+  await page.goto(firstUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  
+  // Wait for initial load
+  await page.waitForTimeout(5000);
+  
+  // Debug: check WebGL
+  try {
+    const webglInfo = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+      if (!gl) return 'NO WebGL';
+      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      return dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : 'unknown renderer';
+    });
+    console.log(`  [INIT] WebGL renderer: ${webglInfo}`);
+  } catch { console.log(`  [INIT] WebGL check failed`); }
+
+  // Debug: page title
+  const title = await page.title();
+  console.log(`  [INIT] Page title: ${title}`);
+
+  // Dismiss popups on first load
+  await dismissPopups(page);
+  
+  // Extra wait for first 3D render
+  console.log(`  [INIT] Waiting 25s for first 3D render...`);
+  await page.waitForTimeout(25000);
+  
+  // Dismiss any popups that appeared during render
+  await dismissPopups(page);
+
+  console.log(`  [INIT] Ready! Starting captures...\n`);
 
   for (let i = 0; i < views.length; i++) {
     const v = views[i];
@@ -189,22 +217,22 @@ async function main() {
     process.stdout.write(`  [${i + 1}/${views.length}] ${v.label} (d=${Math.round(v.d)}m)... `);
 
     try {
-      await page.goto(url, { 
-        waitUntil: 'domcontentloaded', 
-        timeout: 30000 
-      });
+      // For first view, page is already loaded
+      if (i > 0) {
+        await page.goto(url, { 
+          waitUntil: 'domcontentloaded', 
+          timeout: 30000 
+        });
+      }
 
-      // Dismiss popups immediately
-      await page.waitForTimeout(2000);
-      await dismissPopups(page);
-      
       // Wait for 3D scene to render
       await page.waitForTimeout(opts.wait * 1000);
       
-      // Dismiss any popups that appeared during render
+      // Dismiss popups if any
       await dismissPopups(page);
+      await page.waitForTimeout(500);
 
-      // Hide UI chrome
+      // Hide UI chrome (safe method)
       await hideUI(page);
 
       // Capture
