@@ -1,5 +1,5 @@
 /**
- * NH Earth Polygon v2 - CesiumJS with local server
+ * NH Earth Polygon v3 - Dramatic angles like reference
  * Usage: node capture_polygon.js "lat1,lng1|lat2,lng2|lat3,lng3|..."
  */
 const { chromium } = require('playwright');
@@ -20,13 +20,12 @@ async function main() {
   const centerLat = points.reduce((s, p) => s + p.lat, 0) / points.length;
   const centerLng = points.reduce((s, p) => s + p.lng, 0) / points.length;
 
-  // Cesium needs [lng, lat] pairs flat: lng1, lat1, lng2, lat2, ...
   const cesiumCoords = points.map(p => `${p.lng}, ${p.lat}`).join(',\n              ');
 
   const outDir = './screenshots_polygon';
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n🏗️ NH Polygon Capture v2`);
+  console.log(`\n🏗️ NH Polygon Capture v3`);
   console.log(`📍 Center: ${centerLat}, ${centerLng}`);
   console.log(`📐 ${points.length} polygon points\n`);
 
@@ -72,17 +71,17 @@ async function main() {
       selectionIndicator: false,
     });
 
-    // Add extruded polygon
+    // Extruded polygon - green like reference image
     viewer.entities.add({
       polygon: {
         hierarchy: Cesium.Cartesian3.fromDegreesArray([
               ${cesiumCoords}
         ]),
-        extrudedHeight: 30,
+        extrudedHeight: 25,
         height: 0,
-        material: Cesium.Color.fromCssColorString('#3B82F6').withAlpha(0.5),
+        material: Cesium.Color.fromCssColorString('#22C55E').withAlpha(0.55),
         outline: true,
-        outlineColor: Cesium.Color.fromCssColorString('#1E40AF'),
+        outlineColor: Cesium.Color.fromCssColorString('#15803D'),
         outlineWidth: 3,
       }
     });
@@ -94,7 +93,7 @@ async function main() {
               ${cesiumCoords}
         ]),
         width: 4,
-        material: Cesium.Color.fromCssColorString('#EF4444'),
+        material: Cesium.Color.fromCssColorString('#22C55E'),
         clampToGround: true,
       }
     });
@@ -124,13 +123,12 @@ async function main() {
       }
     });
 
-    // Initial view
-    window.setCameraAngle(0, -45, 500);
+    // Initial view - dramatic angle like reference
+    window.setCameraAngle(0, -25, 600);
   </script>
 </body>
 </html>`;
 
-  // Start local HTTP server
   const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(html);
@@ -154,7 +152,6 @@ async function main() {
     deviceScaleFactor: 1,
   })).newPage();
 
-  // Log console messages for debugging
   page.on('console', msg => {
     if (msg.type() === 'error') console.log(`  [BROWSER ERROR] ${msg.text()}`);
   });
@@ -164,7 +161,6 @@ async function main() {
     waitUntil: 'domcontentloaded', timeout: 60000
   });
 
-  // Wait for tiles to load
   console.log('[3] Waiting for terrain + tiles...');
   for (let i = 0; i < 30; i++) {
     await page.waitForTimeout(1000);
@@ -175,14 +171,14 @@ async function main() {
     }
     if (i === 29) console.log('    Warning: tiles may not be fully loaded');
   }
-  // Extra wait for rendering
   await page.waitForTimeout(3000);
 
+  // More dramatic angles: pitch -25 = see more horizon, distance 600 = wider view
   const views = [
-    { name: '01_front',  heading: 0,   pitch: -35, distance: 400, label: 'Front view' },
-    { name: '02_right',  heading: 90,  pitch: -35, distance: 400, label: 'Right view' },
-    { name: '03_back',   heading: 180, pitch: -35, distance: 400, label: 'Back view' },
-    { name: '04_left',   heading: 270, pitch: -35, distance: 400, label: 'Left view' },
+    { name: '01_front',  heading: 0,   pitch: -25, distance: 600, label: 'Front view' },
+    { name: '02_right',  heading: 90,  pitch: -25, distance: 600, label: 'Right view' },
+    { name: '03_back',   heading: 180, pitch: -25, distance: 600, label: 'Back view' },
+    { name: '04_left',   heading: 270, pitch: -25, distance: 600, label: 'Left view' },
   ];
 
   for (let i = 0; i < views.length; i++) {
