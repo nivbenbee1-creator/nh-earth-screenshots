@@ -1,8 +1,9 @@
 /**
- * NH Earth Polygon v1 - CesiumJS with extruded polygon
+ * NH Earth Polygon v2 - CesiumJS with local server
  * Usage: node capture_polygon.js "lat1,lng1|lat2,lng2|lat3,lng3|..."
  */
 const { chromium } = require('playwright');
+const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
@@ -11,27 +12,24 @@ const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxM
 async function main() {
   const polygonInput = process.argv[2] || '30.4234154377576,-83.1261567366417|30.4234154395896,-83.1263946900247|30.4237866271808,-83.1263932673563|30.4237866253528,-83.1261553141869|30.4234154377576,-83.1261567366417';
   
-  // Parse polygon points (lat,lng|lat,lng|...)
   const points = polygonInput.split('|').map(p => {
     const [lat, lng] = p.split(',').map(Number);
     return { lat, lng };
   });
 
-  // Calculate center
   const centerLat = points.reduce((s, p) => s + p.lat, 0) / points.length;
   const centerLng = points.reduce((s, p) => s + p.lng, 0) / points.length;
 
-  // Build Cesium coordinates array (lng, lat pairs for Cesium)
+  // Cesium needs [lng, lat] pairs flat: lng1, lat1, lng2, lat2, ...
   const cesiumCoords = points.map(p => `${p.lng}, ${p.lat}`).join(',\n              ');
 
   const outDir = './screenshots_polygon';
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n🏗️ NH Polygon Capture v1`);
+  console.log(`\n🏗️ NH Polygon Capture v2`);
   console.log(`📍 Center: ${centerLat}, ${centerLng}`);
   console.log(`📐 ${points.length} polygon points\n`);
 
-  // Generate HTML with CesiumJS
   const html = `
 <!DOCTYPE html>
 <html>
@@ -43,7 +41,6 @@ async function main() {
     html, body, #cesiumContainer {
       width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
     }
-    /* Hide Cesium UI elements */
     .cesium-viewer-toolbar,
     .cesium-viewer-animationContainer,
     .cesium-viewer-timelineContainer,
@@ -90,7 +87,7 @@ async function main() {
       }
     });
 
-    // Also add a ground outline for clarity
+    // Ground outline
     viewer.entities.add({
       polyline: {
         positions: Cesium.Cartesian3.fromDegreesArray([
@@ -104,7 +101,6 @@ async function main() {
 
     const center = Cesium.Cartesian3.fromDegrees(${centerLng}, ${centerLat});
 
-    // Function to set camera angle
     window.setCameraAngle = function(heading, pitch, distance) {
       viewer.camera.lookAt(
         center,
@@ -116,10 +112,15 @@ async function main() {
       );
     };
 
-    // Signal that Cesium is ready
+    // Track tile loading
+    window._tilesLoaded = false;
+    let stableCount = 0;
     viewer.scene.globe.tileLoadProgressEvent.addEventListener(function(remaining) {
       if (remaining === 0) {
-        window._cesiumReady = true;
+        stableCount++;
+        if (stableCount > 3) window._tilesLoaded = true;
+      } else {
+        stableCount = 0;
       }
     });
 
@@ -129,8 +130,14 @@ async function main() {
 </body>
 </html>`;
 
-  fs.writeFileSync('cesium_viewer.html', html);
-  console.log('[1] HTML generated');
+  // Start local HTTP server
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(html);
+  });
+  
+  await new Promise(resolve => server.listen(3000, resolve));
+  console.log('[1] Local server running on port 3000');
 
   const browser = await chromium.launch({
     headless: true,
@@ -147,16 +154,30 @@ async function main() {
     deviceScaleFactor: 1,
   })).newPage();
 
+  // Log console messages for debugging
+  page.on('console', msg => {
+    if (msg.type() === 'error') console.log(`  [BROWSER ERROR] ${msg.text()}`);
+  });
+
   console.log('[2] Loading Cesium...');
-  await page.goto(`file://${path.resolve('cesium_viewer.html')}`, {
+  await page.goto('http://localhost:3000', {
     waitUntil: 'domcontentloaded', timeout: 60000
   });
 
   // Wait for tiles to load
   console.log('[3] Waiting for terrain + tiles...');
-  await page.waitForTimeout(15000);
+  for (let i = 0; i < 30; i++) {
+    await page.waitForTimeout(1000);
+    const loaded = await page.evaluate(() => window._tilesLoaded);
+    if (loaded) {
+      console.log(`    Tiles loaded after ${i + 1}s`);
+      break;
+    }
+    if (i === 29) console.log('    Warning: tiles may not be fully loaded');
+  }
+  // Extra wait for rendering
+  await page.waitForTimeout(3000);
 
-  // Camera angles: [heading, pitch, distance]
   const views = [
     { name: '01_front',  heading: 0,   pitch: -35, distance: 400, label: 'Front view' },
     { name: '02_right',  heading: 90,  pitch: -35, distance: 400, label: 'Right view' },
@@ -177,7 +198,7 @@ async function main() {
   }
 
   await browser.close();
-  fs.unlinkSync('cesium_viewer.html');
+  server.close();
   console.log(`\n✅ Done! ${views.length} polygon screenshots captured.`);
 }
 
