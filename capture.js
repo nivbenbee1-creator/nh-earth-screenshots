@@ -1,5 +1,5 @@
 /**
- * NH Earth v18b - Clean cropped screenshots
+ * NH Earth v18c - Clean cropped screenshots
  */
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -11,21 +11,20 @@ async function main() {
   const outDir = './screenshots';
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n🌍 NH Earth v18b\n📍 ${lat}, ${lng}\n`);
+  console.log(`\n🌍 NH Earth v18c\n📍 ${lat}, ${lng}\n`);
 
-  // Use larger viewport so crop still gives good resolution
   const browser = await chromium.launch({
     headless: true,
     args: [
       '--use-gl=swiftshader', '--enable-unsafe-swiftshader',
       '--enable-webgl', '--enable-webgl2',
       '--disable-dev-shm-usage', '--no-sandbox',
-      '--disable-setuid-sandbox', '--window-size=2200,1300',
+      '--disable-setuid-sandbox', '--window-size=2560,1440',
     ],
   });
 
   const page = await (await browser.newContext({
-    viewport: { width: 2200, height: 1300 },
+    viewport: { width: 2560, height: 1440 },
     deviceScaleFactor: 1,
   })).newPage();
 
@@ -44,24 +43,38 @@ async function main() {
   } catch {}
   await page.waitForTimeout(500);
 
-  // Close popup
-  await page.mouse.click(100, 900);
+  // Close popup by clicking center
+  await page.mouse.click(1280, 720);
   await page.waitForTimeout(1000);
 
-  // Close the right-side info card
+  // Close info card on the right
   try {
     const closeBtn = page.locator('[aria-label="Close"]').first();
-    if (await closeBtn.isVisible({ timeout: 1000 })) await closeBtn.click();
+    if (await closeBtn.isVisible({ timeout: 2000 })) {
+      await closeBtn.click();
+      console.log('    Closed info card');
+    }
   } catch {}
   await page.waitForTimeout(500);
 
-  // Crop area: skip top 60px, left 0, right 0, bottom 40px
-  // Result: 1920x1080 clean image from 2200x1300 viewport
-  const crop = { x: 140, y: 60, width: 1920, height: 1080 };
+  // Also try clicking the X button area directly (top-right of card)
+  try {
+    await page.click('button.dismissButton', { timeout: 1000 });
+  } catch {}
+  try {
+    await page.click('[data-close]', { timeout: 1000 });
+  } catch {}
+  await page.waitForTimeout(500);
+
+  // Crop: cut 320px left, 320px right, 180px top, 180px bottom
+  // = 1920x1080 from center of 2560x1440
+  const crop = { x: 320, y: 180, width: 1920, height: 1080 };
+
+  // Center of viewport for mouse actions
+  const cx = 1280, cy = 720;
 
   // Helper: tilt
   async function tilt(upPixels) {
-    const cx = 1100, cy = 650;
     await page.mouse.move(cx, cy);
     await page.keyboard.down('Shift');
     await page.mouse.down();
@@ -75,7 +88,6 @@ async function main() {
 
   // Helper: rotate
   async function rotate(rightPixels) {
-    const cx = 1100, cy = 650;
     await page.mouse.move(cx, cy);
     await page.keyboard.down('Shift');
     await page.mouse.down();
@@ -89,9 +101,9 @@ async function main() {
 
   // === Big initial tilt ===
   console.log(`[3] Tilting to horizon...`);
-  await tilt(450);
+  await tilt(500);
   await page.waitForTimeout(2000);
-  await tilt(450);
+  await tilt(500);
   await page.waitForTimeout(3000);
 
   // === VIEW 1: Front ===
@@ -101,21 +113,21 @@ async function main() {
 
   // === VIEW 2: Rotate 90° right ===
   console.log(`[5] View 2: Right side...`);
-  await rotate(250);
+  await rotate(300);
   await page.waitForTimeout(3000);
   await page.screenshot({ path: path.join(outDir, '02_3d_right.png'), clip: crop });
   console.log(`    ✅ 02_3d_right.png`);
 
   // === VIEW 3: Rotate 180° (back) ===
   console.log(`[6] View 3: Back side...`);
-  await rotate(350);
+  await rotate(400);
   await page.waitForTimeout(3000);
   await page.screenshot({ path: path.join(outDir, '03_3d_back.png'), clip: crop });
   console.log(`    ✅ 03_3d_back.png`);
 
   // === VIEW 4: Rotate 90° more (left) ===
   console.log(`[7] View 4: Left side...`);
-  await rotate(250);
+  await rotate(300);
   await page.waitForTimeout(3000);
   await page.screenshot({ path: path.join(outDir, '04_3d_left.png'), clip: crop });
   console.log(`    ✅ 04_3d_left.png`);
