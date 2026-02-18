@@ -32,12 +32,14 @@ jobs:
 
       - name: Send images to n8n
         if: success()
+        env:
+          POLYGON: ${{ inputs.polygon }}
         run: |
-          CMD="curl -X POST https://bennivbee.app.n8n.cloud/webhook/google-earth-nh"
-          CMD="$CMD -F polygon=${{ inputs.polygon }}"
+          CMD='curl -X POST https://bennivbee.app.n8n.cloud/webhook/google-earth-nh'
+          CMD="$CMD -F \"polygon=${POLYGON}\""
           for f in ./screenshots_polygon/*.png; do
             FILENAME=$(basename "$f")
-            CMD="$CMD -F $FILENAME=@$f"
+            CMD="$CMD -F \"${FILENAME}=@${f}\""
           done
           echo "Sending polygon images..."
           eval $CMD
