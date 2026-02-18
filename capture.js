@@ -1,5 +1,5 @@
 /**
- * NH Earth v17 - 4 dramatic horizon angle shots
+ * NH Earth v18 - Clean cropped screenshots (no UI)
  */
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -11,7 +11,7 @@ async function main() {
   const outDir = './screenshots';
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n🌍 NH Earth v17\n📍 ${lat}, ${lng}\n`);
+  console.log(`\n🌍 NH Earth v18\n📍 ${lat}, ${lng}\n`);
 
   const browser = await chromium.launch({
     headless: true,
@@ -47,7 +47,51 @@ async function main() {
   await page.mouse.click(100, 700);
   await page.waitForTimeout(1000);
 
-  // Helper: tilt (Shift + drag UP = tilt camera forward to see horizon)
+  // Hide ALL UI elements for clean screenshots
+  await page.evaluate(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      /* Hide everything except the Earth canvas */
+      .earth-toolbar-container,
+      .gm-compass,
+      .gm-navigation-widget,
+      .search-container,
+      .earth-search,
+      .bottom-bar,
+      .earth-attribution,
+      .feature-card,
+      .info-card,
+      .place-card,
+      .search-results,
+      .legend-container,
+      [class*="toolbar"],
+      [class*="search"],
+      [class*="panel"],
+      [class*="sidebar"],
+      [class*="navigation"],
+      [class*="compass"],
+      [class*="zoom"],
+      [class*="attribution"],
+      [class*="bottom"],
+      [class*="menu"],
+      [class*="header"],
+      [class*="footer"],
+      [class*="card"],
+      [class*="toast"],
+      [class*="banner"],
+      [class*="modal"],
+      [class*="dialog"],
+      [class*="overlay"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+      }
+    `;
+    document.head.appendChild(style);
+  });
+  await page.waitForTimeout(500);
+
+  // Helper: tilt
   async function tilt(upPixels) {
     const cx = 960, cy = 540;
     await page.mouse.move(cx, cy);
@@ -109,7 +153,7 @@ async function main() {
   console.log(`    ✅ 04_3d_left.png`);
 
   await browser.close();
-  console.log(`\n✅ Done! 4 screenshots captured.`);
+  console.log(`\n✅ Done! 4 clean screenshots captured.`);
 }
 
 main().catch(err => { console.error('FATAL:', err); process.exit(1); });
