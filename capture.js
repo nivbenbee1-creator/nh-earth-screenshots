@@ -1,5 +1,5 @@
 /**
- * NH Earth v16 - 4 dramatic angle shots
+ * NH Earth v17 - 4 dramatic horizon angle shots
  */
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -11,7 +11,7 @@ async function main() {
   const outDir = './screenshots';
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n🌍 NH Earth v16\n📍 ${lat}, ${lng}\n`);
+  console.log(`\n🌍 NH Earth v17\n📍 ${lat}, ${lng}\n`);
 
   const browser = await chromium.launch({
     headless: true,
@@ -47,14 +47,14 @@ async function main() {
   await page.mouse.click(100, 700);
   await page.waitForTimeout(1000);
 
-  // Helper: tilt
+  // Helper: tilt (Shift + drag UP = tilt camera forward to see horizon)
   async function tilt(upPixels) {
     const cx = 960, cy = 540;
     await page.mouse.move(cx, cy);
     await page.keyboard.down('Shift');
     await page.mouse.down();
-    for (let i = 0; i <= 15; i++) {
-      await page.mouse.move(cx, cy - (upPixels * i / 15));
+    for (let i = 0; i <= 20; i++) {
+      await page.mouse.move(cx, cy - (upPixels * i / 20));
       await page.waitForTimeout(30);
     }
     await page.mouse.up();
@@ -67,37 +67,42 @@ async function main() {
     await page.mouse.move(cx, cy);
     await page.keyboard.down('Shift');
     await page.mouse.down();
-    for (let i = 0; i <= 15; i++) {
-      await page.mouse.move(cx + (rightPixels * i / 15), cy);
+    for (let i = 0; i <= 20; i++) {
+      await page.mouse.move(cx + (rightPixels * i / 20), cy);
       await page.waitForTimeout(30);
     }
     await page.mouse.up();
     await page.keyboard.up('Shift');
   }
 
-  // === VIEW 1: Strong tilt forward ===
-  console.log(`[3] View 1: Strong tilt forward...`);
-  await tilt(250);
+  // === Big initial tilt to get horizon view ===
+  console.log(`[3] Tilting to horizon...`);
+  await tilt(450);
+  await page.waitForTimeout(2000);
+  await tilt(450);
   await page.waitForTimeout(3000);
+
+  // === VIEW 1: Front ===
+  console.log(`[4] View 1: Front horizon...`);
   await page.screenshot({ path: path.join(outDir, '01_3d_front.png') });
   console.log(`    ✅ 01_3d_front.png`);
 
   // === VIEW 2: Rotate 90° right ===
-  console.log(`[4] View 2: Rotate right...`);
+  console.log(`[5] View 2: Right side...`);
   await rotate(250);
   await page.waitForTimeout(3000);
   await page.screenshot({ path: path.join(outDir, '02_3d_right.png') });
   console.log(`    ✅ 02_3d_right.png`);
 
   // === VIEW 3: Rotate 180° (back) ===
-  console.log(`[5] View 3: Rotate to back...`);
+  console.log(`[6] View 3: Back side...`);
   await rotate(350);
   await page.waitForTimeout(3000);
   await page.screenshot({ path: path.join(outDir, '03_3d_back.png') });
   console.log(`    ✅ 03_3d_back.png`);
 
   // === VIEW 4: Rotate 90° more (left) ===
-  console.log(`[6] View 4: Rotate to left...`);
+  console.log(`[7] View 4: Left side...`);
   await rotate(250);
   await page.waitForTimeout(3000);
   await page.screenshot({ path: path.join(outDir, '04_3d_left.png') });
