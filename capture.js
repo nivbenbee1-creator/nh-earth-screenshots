@@ -53,13 +53,9 @@ async function main() {
   } catch {}
   await page.waitForTimeout(500);
 
-  // Crop: precise removal of all UI
-  // Top 165px: toolbar + Dismiss banner
-  // Left 60px: mini map widget
-  // Right stops at 1500: removes info card
-  // Bottom stops at 975: removes controls
-  // Result: 1440x810 clean image
-  const crop = { x: 60, y: 165, width: 1440, height: 810 };
+  // Crop: top 195px, left 80px, safe bottom/right
+  // Result: 1400x780 clean image
+  const crop = { x: 80, y: 195, width: 1400, height: 780 };
 
   const cx = 960, cy = 540;
 
