@@ -1,0 +1,43 @@
+name: NH Polygon Screenshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      polygon:
+        description: 'Polygon points (lat,lng|lat,lng|...)'
+        required: true
+        default: '30.4234154377576,-83.1261567366417|30.4234154395896,-83.1263946900247|30.4237866271808,-83.1263932673563|30.4237866253528,-83.1261553141869|30.4234154377576,-83.1261567366417'
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npx playwright install chromium --with-deps
+
+      - name: Capture polygon screenshots
+        run: node capture_polygon.js "${{ inputs.polygon }}"
+
+      - name: Send images to n8n
+        if: success()
+        run: |
+          CMD="curl -X POST https://bennivbee.app.n8n.cloud/webhook/google-earth-nh"
+          CMD="$CMD -F polygon=${{ inputs.polygon }}"
+          for f in ./screenshots_polygon/*.png; do
+            FILENAME=$(basename "$f")
+            CMD="$CMD -F $FILENAME=@$f"
+          done
+          echo "Sending polygon images..."
+          eval $CMD
