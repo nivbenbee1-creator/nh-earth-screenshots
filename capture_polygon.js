@@ -1,10 +1,8 @@
 /**
- * NH Earth Polygon v6 - סדר מובטח
- * 1. Cesium נטען
- * 2. מחכים לטיילס
- * 3. דוגמים גובה קרקע
- * 4. בונים פוליגון עם גובה נכון
- * 5. מצלמים 16 זוויות
+ * NH Earth Polygon v7 - פשוט ואמין
+ * - אין terrain sampling (לא עובד ב-headless)
+ * - פוליגון גבוה 300m = תמיד מעל הקרקע
+ * - תאורה קבועה = אין חושך
  */
 const { chromium } = require('playwright');
 const http = require('http');
@@ -60,8 +58,35 @@ function buildHtml(cesiumCoords, centerLat, centerLng) {
       fullscreenButton: false, infoBox: false, selectionIndicator: false,
     });
 
-    // ✅ תאורה כבויה — תמיד בהיר
+    // ✅ תאורה קבועה - אין שמש, אין חושך
     viewer.scene.globe.enableLighting = false;
+    viewer.scene.light = new Cesium.DirectionalLight({
+      direction: new Cesium.Cartesian3(1, 1, -1),
+      intensity: 2.0,
+    });
+
+    // ✅ פוליגון גבוה 300m מגובה ים - תמיד גלוי מעל הקרקע
+    viewer.entities.add({
+      polygon: {
+        hierarchy: Cesium.Cartesian3.fromDegreesArray([${cesiumCoords}]),
+        height: 0,
+        extrudedHeight: 300,
+        material: Cesium.Color.fromCssColorString('#22C55E').withAlpha(0.55),
+        outline: true,
+        outlineColor: Cesium.Color.fromCssColorString('#15803D'),
+        outlineWidth: 3,
+      }
+    });
+
+    // ✅ גבול מדויק על הקרקע
+    viewer.entities.add({
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArray([${cesiumCoords}]),
+        width: 4,
+        material: Cesium.Color.fromCssColorString('#15803D'),
+        clampToGround: true,
+      }
+    });
 
     const center = Cesium.Cartesian3.fromDegrees(${centerLng}, ${centerLat});
 
@@ -76,70 +101,12 @@ function buildHtml(cesiumCoords, centerLat, centerLng) {
       );
     };
 
-    // ─── STATE FLAGS ───────────────────────────────────────────
     window._tilesLoaded = false;
-    window._polygonReady = false;
-
-    // ─── STEP 1: המתן לטיילס ──────────────────────────────────
     let stableCount = 0;
-    viewer.scene.globe.tileLoadProgressEvent.addEventListener(async function(remaining) {
+    viewer.scene.globe.tileLoadProgressEvent.addEventListener(function(remaining) {
       if (remaining === 0) {
         stableCount++;
-        if (stableCount === 4 && !window._polygonReady) {
-          // ─── STEP 2: דגום גובה קרקע עם retry ─────────────
-          let terrainHeight = 0;
-          for (let attempt = 1; attempt <= 5; attempt++) {
-            try {
-              const pts = [Cesium.Cartographic.fromDegrees(${centerLng}, ${centerLat})];
-              const sampled = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, pts);
-              const h = sampled[0].height;
-              if (h && h > 0) {
-                terrainHeight = h;
-                console.log('Terrain height (attempt ' + attempt + '):', terrainHeight);
-                break;
-              } else {
-                console.warn('Attempt ' + attempt + ' returned 0, retrying...');
-                await new Promise(r => setTimeout(r, 2000));
-              }
-            } catch(e) {
-              console.warn('Attempt ' + attempt + ' failed:', e.message);
-              await new Promise(r => setTimeout(r, 2000));
-            }
-          }
-          // אם כל הניסיונות נכשלו — fallback: נשתמש בגובה גבוה כדי שהקובייה תבצבץ מעל
-          if (terrainHeight === 0) {
-            console.warn('All attempts failed — using fallback height 50');
-            terrainHeight = 50;
-          }
-          console.log('Final terrain height:', terrainHeight);
-
-          // ─── STEP 3: בנה פוליגון עם גובה נכון ────────────
-          viewer.entities.add({
-            polygon: {
-              hierarchy: Cesium.Cartesian3.fromDegreesArray([${cesiumCoords}]),
-              height: terrainHeight,
-              extrudedHeight: terrainHeight + 50,
-              material: Cesium.Color.fromCssColorString('#22C55E').withAlpha(0.55),
-              outline: true,
-              outlineColor: Cesium.Color.fromCssColorString('#15803D'),
-              outlineWidth: 3,
-            }
-          });
-
-          // outline על הקרקע
-          viewer.entities.add({
-            polyline: {
-              positions: Cesium.Cartesian3.fromDegreesArray([${cesiumCoords}]),
-              width: 3,
-              material: Cesium.Color.fromCssColorString('#15803D'),
-              clampToGround: true,
-            }
-          });
-
-          window._polygonReady = true;
-          window._tilesLoaded = true;
-          console.log('Polygon built and ready!');
-        }
+        if (stableCount > 3) window._tilesLoaded = true;
       } else {
         stableCount = 0;
       }
@@ -166,7 +133,7 @@ async function main() {
   const outDir = './screenshots_polygon';
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n🏗️ NH Polygon Capture v6`);
+  console.log(`\n🏗️ NH Polygon Capture v7`);
   console.log(`📍 Center: ${centerLat}, ${centerLng}`);
   console.log(`📐 ${points.length} points | 16 screenshots\n`);
 
@@ -197,19 +164,15 @@ async function main() {
   console.log('[1] Loading Cesium...');
   await page.goto('http://localhost:3000', { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-  // ─── המתן עד שהפוליגון בנוי (tiles + height sample + entity) ───
-  console.log('[2] Waiting for tiles + terrain height + polygon...');
-  for (let i = 0; i < 60; i++) {
+  console.log('[2] Waiting for tiles...');
+  for (let i = 0; i < 40; i++) {
     await page.waitForTimeout(1000);
-    const ready = await page.evaluate(() => window._tilesLoaded && window._polygonReady);
+    const ready = await page.evaluate(() => window._tilesLoaded);
     if (ready) { console.log(`    ✅ Ready after ${i + 1}s`); break; }
-    if (i === 59) console.log('    ⚠️ Timeout - continuing anyway');
+    if (i === 39) console.log('    ⚠️ Timeout - continuing anyway');
   }
-
-  // buffer קטן לרינדור אחרי שהפוליגון נבנה
   await page.waitForTimeout(3000);
 
-  // ─── צלם 16 זוויות ────────────────────────────────────────────
   console.log('[3] Capturing 16 shots...');
   for (const shot of SHOTS) {
     await page.evaluate(({ heading, pitch, distance }) => {
