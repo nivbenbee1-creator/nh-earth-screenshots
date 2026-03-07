@@ -1,6 +1,7 @@
 /**
- * NH Earth Polygon v4 - 3 Styles x 4 Angles = 12 Screenshots
- * Usage: node capture_polygon.js "lat1,lng1|lat2,lng2|lat3,lng3|..."
+ * NH Earth Polygon v5 - Single load, 16 screenshots
+ * טוען Cesium פעם אחת → מצלם 16 זוויות
+ * Usage: node capture_polygon.js "lat1,lng1|lat2,lng2|..."
  */
 const { chromium } = require('playwright');
 const http = require('http');
@@ -9,57 +10,32 @@ const path = require('path');
 
 const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxMy1hZjNkLTQzNjctYWFjYS04MzBjZDYwYjg2MjciLCJpZCI6MzkxNjE0LCJpYXQiOjE3NzE0MTE2NjJ9.14odwmn05mQ89bIEPBEzIAOia0I0AkwjD9oO--Gs4Zs';
 
-// ─── STYLES: all green, different pitches/distances ─────────
-const STYLES = [
-  {
-    name: 'low_08',
-    fillColor: '#22C55E',
-    fillAlpha: 0.55,
-    outlineColor: '#15803D',
-    extrudedHeight: 25,
-    pitch: -8,
-    distance: 800,
-  },
-  {
-    name: 'mid_18',
-    fillColor: '#22C55E',
-    fillAlpha: 0.55,
-    outlineColor: '#15803D',
-    extrudedHeight: 25,
-    pitch: -18,
-    distance: 600,
-  },
-  {
-    name: 'mid_18_zoom',
-    fillColor: '#22C55E',
-    fillAlpha: 0.55,
-    outlineColor: '#15803D',
-    extrudedHeight: 25,
-    pitch: -18,
-    distance: 300,
-  },
-  {
-    name: 'high_35',
-    fillColor: '#22C55E',
-    fillAlpha: 0.55,
-    outlineColor: '#15803D',
-    extrudedHeight: 25,
-    pitch: -35,
-    distance: 800,
-  },
+// 16 shots: 4 pitches x 4 headings
+const SHOTS = [
+  // pitch -8 = כמעט אופקי, שמיים מלאים
+  { name: 'low_08_01_front', heading: 0,   pitch: -8,  distance: 800 },
+  { name: 'low_08_02_right', heading: 90,  pitch: -8,  distance: 800 },
+  { name: 'low_08_03_back',  heading: 180, pitch: -8,  distance: 800 },
+  { name: 'low_08_04_left',  heading: 270, pitch: -8,  distance: 800 },
+  // pitch -18 = נמוך, דרמטי
+  { name: 'mid_18_01_front', heading: 0,   pitch: -18, distance: 600 },
+  { name: 'mid_18_02_right', heading: 90,  pitch: -18, distance: 600 },
+  { name: 'mid_18_03_back',  heading: 180, pitch: -18, distance: 600 },
+  { name: 'mid_18_04_left',  heading: 270, pitch: -18, distance: 600 },
+  // pitch -18 zoom = קרוב יותר
+  { name: 'zoom_18_01_front', heading: 0,   pitch: -18, distance: 300 },
+  { name: 'zoom_18_02_right', heading: 90,  pitch: -18, distance: 300 },
+  { name: 'zoom_18_03_back',  heading: 180, pitch: -18, distance: 300 },
+  { name: 'zoom_18_04_left',  heading: 270, pitch: -18, distance: 300 },
+  // pitch -35 = גבוה, רואים הקשר אזור (זה שאהבת)
+  { name: 'high_35_01_front', heading: 0,   pitch: -35, distance: 800 },
+  { name: 'high_35_02_right', heading: 90,  pitch: -35, distance: 800 },
+  { name: 'high_35_03_back',  heading: 180, pitch: -35, distance: 800 },
+  { name: 'high_35_04_left',  heading: 270, pitch: -35, distance: 800 },
 ];
 
-const HEADINGS = [
-  { heading: 0,   label: '01_front' },
-  { heading: 90,  label: '02_right' },
-  { heading: 180, label: '03_back'  },
-  { heading: 270, label: '04_left'  },
-];
-
-// ─── BUILD HTML ──────────────────────────────────────────────
-function buildHtml(cesiumCoords, centerLat, centerLng, style) {
-  return `
-<!DOCTYPE html>
+function buildHtml(cesiumCoords, centerLat, centerLng) {
+  return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -86,15 +62,25 @@ function buildHtml(cesiumCoords, centerLat, centerLng, style) {
       fullscreenButton: false, infoBox: false, selectionIndicator: false,
     });
 
-    // Extruded polygon - no height:0 so it sits on terrain correctly
+    // פוליגון ירוק מוגבה
     viewer.entities.add({
       polygon: {
         hierarchy: Cesium.Cartesian3.fromDegreesArray([${cesiumCoords}]),
-        extrudedHeight: ${style.extrudedHeight},
-        material: Cesium.Color.fromCssColorString('${style.fillColor}').withAlpha(${style.fillAlpha}),
+        extrudedHeight: 25,
+        material: Cesium.Color.fromCssColorString('#22C55E').withAlpha(0.55),
         outline: true,
-        outlineColor: Cesium.Color.fromCssColorString('${style.outlineColor}'),
+        outlineColor: Cesium.Color.fromCssColorString('#15803D'),
         outlineWidth: 3,
+      }
+    });
+
+    // קו outline clampToGround - מסמן גבולות בדיוק על הקרקע
+    viewer.entities.add({
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArray([${cesiumCoords}]),
+        width: 3,
+        material: Cesium.Color.fromCssColorString('#15803D'),
+        clampToGround: true,
       }
     });
 
@@ -116,19 +102,18 @@ function buildHtml(cesiumCoords, centerLat, centerLng, style) {
     viewer.scene.globe.tileLoadProgressEvent.addEventListener(function(remaining) {
       if (remaining === 0) {
         stableCount++;
-        if (stableCount > 8) window._tilesLoaded = true;
+        if (stableCount > 3) window._tilesLoaded = true;
       } else {
         stableCount = 0;
       }
     });
 
-    window.setCameraAngle(0, ${style.pitch}, ${style.distance});
+    window.setCameraAngle(0, -35, 800);
   </script>
 </body>
 </html>`;
 }
 
-// ─── MAIN ────────────────────────────────────────────────────
 async function main() {
   const polygonInput = process.argv[2] || '30.4234154377576,-83.1261567366417|30.4234154395896,-83.1263946900247|30.4237866271808,-83.1263932673563|30.4237866253528,-83.1261553141869|30.4234154377576,-83.1261567366417';
 
@@ -144,9 +129,17 @@ async function main() {
   const outDir = './screenshots_polygon';
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n🏗️ NH Polygon Capture v4`);
+  console.log(`\n🏗️ NH Polygon Capture v5`);
   console.log(`📍 Center: ${centerLat}, ${centerLng}`);
-  console.log(`📐 ${points.length} points | 4 pitches x 4 angles = 16 screenshots\n`);
+  console.log(`📐 ${points.length} points | 16 screenshots | single load\n`);
+
+  // שרת מקומי אחד בלבד
+  const html = buildHtml(cesiumCoords, centerLat, centerLng);
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(html);
+  });
+  await new Promise(resolve => server.listen(3000, resolve));
 
   const browser = await chromium.launch({
     headless: true,
@@ -158,52 +151,39 @@ async function main() {
     ],
   });
 
-  for (const style of STYLES) {
-    console.log(`\n🎨 Style: ${style.name}`);
+  const page = await (await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+    deviceScaleFactor: 1,
+  })).newPage();
 
-    // spin up local server with this style's HTML
-    const html = buildHtml(cesiumCoords, centerLat, centerLng, style);
-    const server = http.createServer((req, res) => {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(html);
-    });
-    await new Promise(resolve => server.listen(3000, resolve));
+  console.log('[1] Loading Cesium...');
+  await page.goto('http://localhost:3000', { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-    const page = await (await browser.newContext({
-      viewport: { width: 1920, height: 1080 },
-      deviceScaleFactor: 1,
-    })).newPage();
+  // המתנה לטיילס - פעם אחת בלבד!
+  console.log('[2] Waiting for terrain tiles...');
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(1000);
+    const loaded = await page.evaluate(() => window._tilesLoaded);
+    if (loaded) { console.log(`    ✅ Tiles loaded after ${i + 1}s`); break; }
+    if (i === 39) console.log('    ⚠️ Timeout - continuing anyway');
+  }
+  await page.waitForTimeout(3000);
 
-    await page.goto('http://localhost:3000', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  // 16 זוויות מאותו session - terrain כבר טעון!
+  console.log('[3] Capturing 16 shots...');
+  for (const shot of SHOTS) {
+    await page.evaluate(({ heading, pitch, distance }) => {
+      window.setCameraAngle(heading, pitch, distance);
+    }, { heading: shot.heading, pitch: shot.pitch, distance: shot.distance });
 
-    // wait for tiles
-    console.log('  ⏳ Loading terrain...');
-    for (let i = 0; i < 30; i++) {
-      await page.waitForTimeout(1000);
-      const loaded = await page.evaluate(() => window._tilesLoaded);
-      if (loaded) { console.log(`  ✅ Tiles loaded (${i + 1}s)`); break; }
-    }
-    await page.waitForTimeout(5000);
-
-    // 4 angles
-    for (const view of HEADINGS) {
-      await page.evaluate(({ heading, pitch, distance }) => {
-        window.setCameraAngle(heading, pitch, distance);
-      }, { heading: view.heading, pitch: style.pitch, distance: style.distance });
-
-      await page.waitForTimeout(4000);
-      const filename = `${style.name}_${view.label}.png`;
-      await page.screenshot({ path: path.join(outDir, filename) });
-      console.log(`  📸 ${filename}`);
-    }
-
-    await page.close();
-    server.close();
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await page.waitForTimeout(3000);
+    await page.screenshot({ path: path.join(outDir, `${shot.name}.png`) });
+    console.log(`    📸 ${shot.name}.png`);
   }
 
   await browser.close();
-  console.log(`\n✅ Done! 12 screenshots in ${outDir}/`);
+  server.close();
+  console.log(`\n✅ Done! 16 screenshots in ${outDir}/`);
 }
 
 main().catch(err => { console.error('FATAL:', err); process.exit(1); });
