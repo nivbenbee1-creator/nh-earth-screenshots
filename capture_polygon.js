@@ -1,12 +1,11 @@
 /**
- * NH Earth Polygon v9 - המחקר המנצח
+ * NH Earth Polygon v10 - הגרסה המנצחת
  * 
- * תיקונים לפי המחקר:
- * 1. heightReference + extrudedHeightReference = פוליגון על הקרקע תמיד
- * 2. highDynamicRange=false + fog off + atmosphere off = בהירות אחידה
- * 3. מחשב distance אוטומטי לפי גודל החלקה
- * 4. tilesLoaded + _tileLoadQueue = זיהוי אמין
- * 5. preserveDrawingBuffer = אין תמונה שחורה
+ * פתרונות לפי המחקר:
+ * 1. viewer.zoomTo + HeadingPitchRange(heading, pitch, undefined) = centering מושלם אוטומטי
+ * 2. extrudedHeight = 0.2 * sqrt(area_m2) = פרופורציה לפי גודל החלקה
+ * 3. alpha:false + viewer.render() לפני screenshot = אין תמונה שחורה
+ * 4. _tileLoadQueue polling = סנכרון אמין
  */
 const { chromium } = require('playwright');
 const http = require('http');
@@ -15,12 +14,34 @@ const path = require('path');
 
 const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxMy1hZjNkLTQzNjctYWFjYS04MzBjZDYwYjg2MjciLCJpZCI6MzkxNjE0LCJpYXQiOjE3NzE0MTE2NjJ9.14odwmn05mQ89bIEPBEzIAOia0I0AkwjD9oO--Gs4Zs';
 
-function buildHtml(cesiumCoords, centerLat, centerLng, radius) {
-  // מחשב distance לפי גודל החלקה ופיץ'
-  // pitch -25: multiplier 8.5, pitch -10: multiplier 7.2
-  const distStandard = Math.round(radius * 12);
-  const distCinematic = Math.round(radius * 10);
+const SHOTS = [
+  { name: '01_standard_front',  heading: 0,   pitch: -25 },
+  { name: '02_standard_right',  heading: 90,  pitch: -25 },
+  { name: '03_standard_back',   heading: 180, pitch: -25 },
+  { name: '04_standard_left',   heading: 270, pitch: -25 },
+  { name: '05_cinematic_front', heading: 0,   pitch: -15 },
+  { name: '06_cinematic_right', heading: 90,  pitch: -15 },
+  { name: '07_cinematic_back',  heading: 180, pitch: -15 },
+  { name: '08_cinematic_left',  heading: 270, pitch: -15 },
+];
 
+// חישוב שטח פוליגון במ"ר (Shoelace formula)
+function calcAreaM2(points) {
+  let area = 0;
+  const n = points.length;
+  const R = 6371000; // רדיוס כדור הארץ במטרים
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const lat1 = points[i].lat * Math.PI / 180;
+    const lat2 = points[j].lat * Math.PI / 180;
+    const lng1 = points[i].lng * Math.PI / 180;
+    const lng2 = points[j].lng * Math.PI / 180;
+    area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
+  }
+  return Math.abs(area * R * R / 2);
+}
+
+function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight) {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -40,7 +61,6 @@ function buildHtml(cesiumCoords, centerLat, centerLng, radius) {
   <script>
     Cesium.Ion.defaultAccessToken = '${CESIUM_TOKEN}';
 
-    // ✅ preserveDrawingBuffer - חובה למנוע תמונה שחורה
     const viewer = new Cesium.Viewer('cesiumContainer', {
       terrain: Cesium.Terrain.fromWorldTerrain(),
       animation: false, timeline: false, homeButton: false,
@@ -50,32 +70,33 @@ function buildHtml(cesiumCoords, centerLat, centerLng, radius) {
       shadows: false,
       requestRenderMode: false,
       contextOptions: {
-        webgl: { preserveDrawingBuffer: true }
+        webgl: {
+          preserveDrawingBuffer: true,
+          alpha: false,  // ✅ חובה למנוע תמונה שחורה
+        }
       },
     });
 
     const scene = viewer.scene;
-    const globe = viewer.scene.globe;
+    const globe = scene.globe;
 
-    // ✅ כל הגדרות התאורה לפי המחקר
+    // ✅ תאורה אחידה
     globe.enableLighting = false;
     scene.highDynamicRange = false;
     scene.fog.enabled = false;
     globe.showGroundAtmosphere = false;
-    globe.maximumScreenSpaceError = 2.0;
-
-    // ✅ תאורה אחידה מכל כיוון
+    globe.maximumScreenSpaceError = 16.0;
     scene.light = new Cesium.DirectionalLight({
       direction: new Cesium.Cartesian3(1, 1, -1),
       intensity: 3.0,
     });
 
     // ✅ פוליגון על הקרקע - heightReference + extrudedHeightReference
-    viewer.entities.add({
+    const parcelEntity = viewer.entities.add({
       polygon: {
         hierarchy: Cesium.Cartesian3.fromDegreesArray([${cesiumCoords}]),
         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-        extrudedHeight: 25,
+        extrudedHeight: ${extrudedHeight},
         extrudedHeightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
         perPositionHeight: false,
         material: Cesium.Color.fromCssColorString('#22C55E').withAlpha(0.6),
@@ -85,49 +106,29 @@ function buildHtml(cesiumCoords, centerLat, centerLng, radius) {
       }
     });
 
-    const center = Cesium.Cartesian3.fromDegrees(${centerLng}, ${centerLat});
-
-    // shots array - יחושב לפי גודל החלקה
-    window.SHOTS = [
-      { name: '01_standard_front', heading: 0,   pitch: -25, distance: ${distStandard} },
-      { name: '02_standard_right', heading: 90,  pitch: -25, distance: ${distStandard} },
-      { name: '03_standard_back',  heading: 180, pitch: -25, distance: ${distStandard} },
-      { name: '04_standard_left',  heading: 270, pitch: -25, distance: ${distStandard} },
-      { name: '05_cinematic_front', heading: 0,   pitch: -15, distance: ${distCinematic} },
-      { name: '06_cinematic_right', heading: 90,  pitch: -15, distance: ${distCinematic} },
-      { name: '07_cinematic_back',  heading: 180, pitch: -15, distance: ${distCinematic} },
-      { name: '08_cinematic_left',  heading: 270, pitch: -15, distance: ${distCinematic} },
-    ];
-
-    window.setCameraAngle = function(heading, pitch, distance) {
-      // מזיז את נקודת המטרה קדימה לפי הפיץ' - כך הפוליגון נופל באמצע הפריים
-      const pitchRad = Cesium.Math.toRadians(pitch);
-      const headingRad = Cesium.Math.toRadians(heading);
-      const offset = distance * Math.tan(pitchRad) * 0.5;
-
-      const centerCart = Cesium.Cartesian3.fromDegrees(${centerLng}, ${centerLat});
-      const east = new Cesium.Cartesian3(-Math.sin(headingRad), Math.cos(headingRad), 0);
-      const forward = new Cesium.Cartesian3(
-        -Math.cos(headingRad), -Math.sin(headingRad), 0
-      );
-
-      const targetCart = new Cesium.Cartesian3(
-        centerCart.x + forward.x * offset,
-        centerCart.y + forward.y * offset,
-        centerCart.z
-      );
-
-      viewer.camera.lookAt(
-        targetCart,
-        new Cesium.HeadingPitchRange(
-          headingRad,
-          pitchRad,
-          distance
-        )
-      );
+    // ✅ viewer.zoomTo עם HeadingPitchRange(heading, pitch, undefined)
+    // range=undefined = Cesium מחשב מרחק אוטומטי = centering מושלם
+    window.zoomToShot = async function(heading, pitch) {
+      return new Promise((resolve) => {
+        viewer.zoomTo(
+          parcelEntity,
+          new Cesium.HeadingPitchRange(
+            Cesium.Math.toRadians(heading),
+            Cesium.Math.toRadians(pitch),
+            undefined  // ✅ auto-distance = centering מושלם
+          )
+        ).then(() => {
+          resolve();
+        });
+      });
     };
 
-    // ✅ זיהוי טעינה אמין לפי המחקר
+    // ✅ render מפורש לפני screenshot = אין תמונה שחורה
+    window.forceRender = function() {
+      viewer.render();
+    };
+
+    // ✅ זיהוי טעינה אמין
     window._ready = false;
     scene.postRender.addEventListener(function() {
       if (window._ready) return;
@@ -141,29 +142,10 @@ function buildHtml(cesiumCoords, centerLat, centerLng, radius) {
       }
     });
 
-    window.setCameraAngle(0, -25, ${distStandard});
-    console.log('distStandard=${distStandard}, distCinematic=${distCinematic}, radius=${radius}');
+    console.log('extrudedHeight=${extrudedHeight}');
   </script>
 </body>
 </html>`;
-}
-
-// חישוב bounding sphere radius מהפוליגון
-function calcRadius(points) {
-  const lats = points.map(p => p.lat);
-  const lngs = points.map(p => p.lng);
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
-
-  // המרה למטרים (קירוב)
-  const latDiff = (maxLat - minLat) * 111320;
-  const lngDiff = (maxLng - minLng) * 111320 * Math.cos((minLat + maxLat) / 2 * Math.PI / 180);
-
-  // רדיוס הספירה המקיפה
-  const radius = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) / 2;
-
-  // מינימום 100 מטר, מקסימום 5000
-  return Math.max(100, Math.min(5000, Math.round(radius)));
 }
 
 async function main() {
@@ -177,17 +159,20 @@ async function main() {
   const centerLat = points.reduce((s, p) => s + p.lat, 0) / points.length;
   const centerLng = points.reduce((s, p) => s + p.lng, 0) / points.length;
   const cesiumCoords = points.map(p => `${p.lng}, ${p.lat}`).join(', ');
-  const radius = calcRadius(points);
+
+  // ✅ extrudedHeight = 0.2 * sqrt(area_m2) לפי המחקר
+  const areaM2 = calcAreaM2(points);
+  const extrudedHeight = Math.max(15, Math.min(200, Math.round(0.2 * Math.sqrt(areaM2))));
 
   const outDir = './screenshots_polygon';
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n🏗️ NH Polygon Capture v9`);
+  console.log(`\n🏗️ NH Polygon Capture v10`);
   console.log(`📍 Center: ${centerLat}, ${centerLng}`);
-  console.log(`📐 Radius: ${radius}m | distStandard: ${Math.round(radius * 8.5)}m | distCinematic: ${Math.round(radius * 7.2)}m`);
+  console.log(`📐 Area: ${Math.round(areaM2)}m² | extrudedHeight: ${extrudedHeight}m`);
   console.log(`📸 8 screenshots\n`);
 
-  const html = buildHtml(cesiumCoords, centerLat, centerLng, radius);
+  const html = buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight);
   const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(html);
@@ -214,8 +199,8 @@ async function main() {
   console.log('[1] Loading Cesium...');
   await page.goto('http://localhost:3000', { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-  // ✅ המתנה לפי המחקר - tilesLoaded + _tileLoadQueue
-  console.log('[2] Waiting for tiles (reliable method)...');
+  // ✅ המתנה אמינה
+  console.log('[2] Waiting for tiles...');
   for (let i = 0; i < 60; i++) {
     await page.waitForTimeout(1000);
     const ready = await page.evaluate(() => window._ready);
@@ -224,16 +209,20 @@ async function main() {
   }
   await page.waitForTimeout(2000);
 
-  // צלם 8 זוויות
+  // ✅ 8 זוויות עם zoomTo + forceRender
   console.log('[3] Capturing 8 shots...');
-  const shots = await page.evaluate(() => window.SHOTS);
-
-  for (const shot of shots) {
-    await page.evaluate(({ heading, pitch, distance }) => {
-      window.setCameraAngle(heading, pitch, distance);
-    }, { heading: shot.heading, pitch: shot.pitch, distance: shot.distance });
+  for (const shot of SHOTS) {
+    // zoomTo עם auto-distance = centering מושלם
+    await page.evaluate(({ heading, pitch }) => {
+      return window.zoomToShot(heading, pitch);
+    }, { heading: shot.heading, pitch: shot.pitch });
 
     await page.waitForTimeout(3000);
+
+    // ✅ viewer.render() לפני screenshot = אין תמונה שחורה
+    await page.evaluate(() => window.forceRender());
+    await page.waitForTimeout(500);
+
     await page.screenshot({ path: path.join(outDir, `${shot.name}.png`) });
     console.log(`    📸 ${shot.name}.png`);
   }
