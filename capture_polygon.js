@@ -9,33 +9,42 @@ const path = require('path');
 
 const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxMy1hZjNkLTQzNjctYWFjYS04MzBjZDYwYjg2MjciLCJpZCI6MzkxNjE0LCJpYXQiOjE3NzE0MTE2NjJ9.14odwmn05mQ89bIEPBEzIAOia0I0AkwjD9oO--Gs4Zs';
 
-// ─── 3 STYLES ───────────────────────────────────────────────
+// ─── STYLES: all green, different pitches/distances ─────────
 const STYLES = [
   {
-    name: 'green',
+    name: 'low_08',
     fillColor: '#22C55E',
     fillAlpha: 0.55,
     outlineColor: '#15803D',
     extrudedHeight: 25,
-    pitch: -25,
+    pitch: -8,
+    distance: 800,
+  },
+  {
+    name: 'mid_18',
+    fillColor: '#22C55E',
+    fillAlpha: 0.55,
+    outlineColor: '#15803D',
+    extrudedHeight: 25,
+    pitch: -18,
     distance: 600,
   },
   {
-    name: 'blue',
-    fillColor: '#1E3A8A',
-    fillAlpha: 0.65,
-    outlineColor: '#3B82F6',
-    extrudedHeight: 40,   // גבוה יותר = דרמטי יותר
-    pitch: -18,           // נמוך יותר = רואים יותר שמיים
-    distance: 500,
+    name: 'mid_18_zoom',
+    fillColor: '#22C55E',
+    fillAlpha: 0.55,
+    outlineColor: '#15803D',
+    extrudedHeight: 25,
+    pitch: -18,
+    distance: 300,
   },
   {
-    name: 'red',
-    fillColor: '#DC2626',
-    fillAlpha: 0.60,
-    outlineColor: '#FF4444',
-    extrudedHeight: 20,
-    pitch: -35,           // גבוה יותר = רואים יותר שטח סביב
+    name: 'high_35',
+    fillColor: '#22C55E',
+    fillAlpha: 0.55,
+    outlineColor: '#15803D',
+    extrudedHeight: 25,
+    pitch: -35,
     distance: 800,
   },
 ];
@@ -77,26 +86,15 @@ function buildHtml(cesiumCoords, centerLat, centerLng, style) {
       fullscreenButton: false, infoBox: false, selectionIndicator: false,
     });
 
-    // Extruded polygon
+    // Extruded polygon - no height:0 so it sits on terrain correctly
     viewer.entities.add({
       polygon: {
         hierarchy: Cesium.Cartesian3.fromDegreesArray([${cesiumCoords}]),
         extrudedHeight: ${style.extrudedHeight},
-        height: 0,
         material: Cesium.Color.fromCssColorString('${style.fillColor}').withAlpha(${style.fillAlpha}),
         outline: true,
         outlineColor: Cesium.Color.fromCssColorString('${style.outlineColor}'),
         outlineWidth: 3,
-      }
-    });
-
-    // Ground outline
-    viewer.entities.add({
-      polyline: {
-        positions: Cesium.Cartesian3.fromDegreesArray([${cesiumCoords}]),
-        width: 4,
-        material: Cesium.Color.fromCssColorString('${style.outlineColor}'),
-        clampToGround: true,
       }
     });
 
@@ -118,7 +116,7 @@ function buildHtml(cesiumCoords, centerLat, centerLng, style) {
     viewer.scene.globe.tileLoadProgressEvent.addEventListener(function(remaining) {
       if (remaining === 0) {
         stableCount++;
-        if (stableCount > 3) window._tilesLoaded = true;
+        if (stableCount > 8) window._tilesLoaded = true;
       } else {
         stableCount = 0;
       }
@@ -148,7 +146,7 @@ async function main() {
 
   console.log(`\n🏗️ NH Polygon Capture v4`);
   console.log(`📍 Center: ${centerLat}, ${centerLng}`);
-  console.log(`📐 ${points.length} points | 3 styles x 4 angles = 12 screenshots\n`);
+  console.log(`📐 ${points.length} points | 4 pitches x 4 angles = 16 screenshots\n`);
 
   const browser = await chromium.launch({
     headless: true,
@@ -185,7 +183,7 @@ async function main() {
       const loaded = await page.evaluate(() => window._tilesLoaded);
       if (loaded) { console.log(`  ✅ Tiles loaded (${i + 1}s)`); break; }
     }
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(5000);
 
     // 4 angles
     for (const view of HEADINGS) {
