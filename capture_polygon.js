@@ -1,8 +1,7 @@
 /**
- * NH Earth Polygon v7 - פשוט ואמין
- * - אין terrain sampling (לא עובד ב-headless)
- * - פוליגון גבוה 300m = תמיד מעל הקרקע
- * - תאורה קבועה = אין חושך
+ * NH Earth Polygon v8 - חזרה לבסיס + 4 זוויות אופק
+ * 4 מקוריות (pitch -25) + 4 נמוכות/אופקיות (pitch -10)
+ * = 8 תמונות
  */
 const { chromium } = require('playwright');
 const http = require('http');
@@ -12,22 +11,16 @@ const path = require('path');
 const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxMy1hZjNkLTQzNjctYWFjYS04MzBjZDYwYjg2MjciLCJpZCI6MzkxNjE0LCJpYXQiOjE3NzE0MTE2NjJ9.14odwmn05mQ89bIEPBEzIAOia0I0AkwjD9oO--Gs4Zs';
 
 const SHOTS = [
-  { name: 'low_08_01_front',  heading: 0,   pitch: -8,  distance: 800 },
-  { name: 'low_08_02_right',  heading: 90,  pitch: -8,  distance: 800 },
-  { name: 'low_08_03_back',   heading: 180, pitch: -8,  distance: 800 },
-  { name: 'low_08_04_left',   heading: 270, pitch: -8,  distance: 800 },
-  { name: 'mid_18_01_front',  heading: 0,   pitch: -18, distance: 600 },
-  { name: 'mid_18_02_right',  heading: 90,  pitch: -18, distance: 600 },
-  { name: 'mid_18_03_back',   heading: 180, pitch: -18, distance: 600 },
-  { name: 'mid_18_04_left',   heading: 270, pitch: -18, distance: 600 },
-  { name: 'zoom_18_01_front', heading: 0,   pitch: -18, distance: 300 },
-  { name: 'zoom_18_02_right', heading: 90,  pitch: -18, distance: 300 },
-  { name: 'zoom_18_03_back',  heading: 180, pitch: -18, distance: 300 },
-  { name: 'zoom_18_04_left',  heading: 270, pitch: -18, distance: 300 },
-  { name: 'high_35_01_front', heading: 0,   pitch: -35, distance: 800 },
-  { name: 'high_35_02_right', heading: 90,  pitch: -35, distance: 800 },
-  { name: 'high_35_03_back',  heading: 180, pitch: -35, distance: 800 },
-  { name: 'high_35_04_left',  heading: 270, pitch: -35, distance: 800 },
+  // 4 מקוריות - עבדו טוב
+  { name: '01_orig_front', heading: 0,   pitch: -25, distance: 600 },
+  { name: '02_orig_right', heading: 90,  pitch: -25, distance: 600 },
+  { name: '03_orig_back',  heading: 180, pitch: -25, distance: 600 },
+  { name: '04_orig_left',  heading: 270, pitch: -25, distance: 600 },
+  // 4 חדשות - נמוך + אופקי + zoom סביר
+  { name: '05_low_front',  heading: 0,   pitch: -10, distance: 400 },
+  { name: '06_low_right',  heading: 90,  pitch: -10, distance: 400 },
+  { name: '07_low_back',   heading: 180, pitch: -10, distance: 400 },
+  { name: '08_low_left',   heading: 270, pitch: -10, distance: 400 },
 ];
 
 function buildHtml(cesiumCoords, centerLat, centerLng) {
@@ -58,33 +51,18 @@ function buildHtml(cesiumCoords, centerLat, centerLng) {
       fullscreenButton: false, infoBox: false, selectionIndicator: false,
     });
 
-    // ✅ תאורה קבועה - אין שמש, אין חושך
+    // תאורה קבועה - אין חושך
     viewer.scene.globe.enableLighting = false;
-    viewer.scene.light = new Cesium.DirectionalLight({
-      direction: new Cesium.Cartesian3(1, 1, -1),
-      intensity: 2.0,
-    });
 
-    // ✅ פוליגון גבוה 300m מגובה ים - תמיד גלוי מעל הקרקע
+    // פוליגון ירוק - פשוט, בלי height
     viewer.entities.add({
       polygon: {
         hierarchy: Cesium.Cartesian3.fromDegreesArray([${cesiumCoords}]),
-        height: 0,
-        extrudedHeight: 300,
+        extrudedHeight: 25,
         material: Cesium.Color.fromCssColorString('#22C55E').withAlpha(0.55),
         outline: true,
         outlineColor: Cesium.Color.fromCssColorString('#15803D'),
         outlineWidth: 3,
-      }
-    });
-
-    // ✅ גבול מדויק על הקרקע
-    viewer.entities.add({
-      polyline: {
-        positions: Cesium.Cartesian3.fromDegreesArray([${cesiumCoords}]),
-        width: 4,
-        material: Cesium.Color.fromCssColorString('#15803D'),
-        clampToGround: true,
       }
     });
 
@@ -112,7 +90,7 @@ function buildHtml(cesiumCoords, centerLat, centerLng) {
       }
     });
 
-    window.setCameraAngle(0, -35, 800);
+    window.setCameraAngle(0, -25, 600);
   </script>
 </body>
 </html>`;
@@ -133,9 +111,9 @@ async function main() {
   const outDir = './screenshots_polygon';
   fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n🏗️ NH Polygon Capture v7`);
+  console.log(`\n🏗️ NH Polygon Capture v8`);
   console.log(`📍 Center: ${centerLat}, ${centerLng}`);
-  console.log(`📐 ${points.length} points | 16 screenshots\n`);
+  console.log(`📐 8 screenshots (4 original + 4 horizon)\n`);
 
   const html = buildHtml(cesiumCoords, centerLat, centerLng);
   const server = http.createServer((req, res) => {
@@ -173,7 +151,7 @@ async function main() {
   }
   await page.waitForTimeout(3000);
 
-  console.log('[3] Capturing 16 shots...');
+  console.log('[3] Capturing 8 shots...');
   for (const shot of SHOTS) {
     await page.evaluate(({ heading, pitch, distance }) => {
       window.setCameraAngle(heading, pitch, distance);
@@ -186,7 +164,7 @@ async function main() {
 
   await browser.close();
   server.close();
-  console.log(`\n✅ Done! 16 screenshots in ${outDir}/`);
+  console.log(`\n✅ Done! 8 screenshots in ${outDir}/`);
 }
 
 main().catch(err => { console.error('FATAL:', err); process.exit(1); });
