@@ -18,8 +18,8 @@ const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxM
 function buildHtml(cesiumCoords, centerLat, centerLng, radius) {
   // מחשב distance לפי גודל החלקה ופיץ'
   // pitch -25: multiplier 8.5, pitch -10: multiplier 7.2
-  const distStandard = Math.round(radius * 8.5);
-  const distCinematic = Math.round(radius * 7.2);
+  const distStandard = Math.round(radius * 12);
+  const distCinematic = Math.round(radius * 10);
 
   return `<!DOCTYPE html>
 <html>
@@ -93,10 +93,10 @@ function buildHtml(cesiumCoords, centerLat, centerLng, radius) {
       { name: '02_standard_right', heading: 90,  pitch: -25, distance: ${distStandard} },
       { name: '03_standard_back',  heading: 180, pitch: -25, distance: ${distStandard} },
       { name: '04_standard_left',  heading: 270, pitch: -25, distance: ${distStandard} },
-      { name: '05_cinematic_front', heading: 0,   pitch: -10, distance: ${distCinematic} },
-      { name: '06_cinematic_right', heading: 90,  pitch: -10, distance: ${distCinematic} },
-      { name: '07_cinematic_back',  heading: 180, pitch: -10, distance: ${distCinematic} },
-      { name: '08_cinematic_left',  heading: 270, pitch: -10, distance: ${distCinematic} },
+      { name: '05_cinematic_front', heading: 0,   pitch: -15, distance: ${distCinematic} },
+      { name: '06_cinematic_right', heading: 90,  pitch: -15, distance: ${distCinematic} },
+      { name: '07_cinematic_back',  heading: 180, pitch: -15, distance: ${distCinematic} },
+      { name: '08_cinematic_left',  heading: 270, pitch: -15, distance: ${distCinematic} },
     ];
 
     window.setCameraAngle = function(heading, pitch, distance) {
