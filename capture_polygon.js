@@ -100,11 +100,28 @@ function buildHtml(cesiumCoords, centerLat, centerLng, radius) {
     ];
 
     window.setCameraAngle = function(heading, pitch, distance) {
+      // מזיז את נקודת המטרה קדימה לפי הפיץ' - כך הפוליגון נופל באמצע הפריים
+      const pitchRad = Cesium.Math.toRadians(pitch);
+      const headingRad = Cesium.Math.toRadians(heading);
+      const offset = distance * Math.tan(pitchRad) * 0.5;
+
+      const centerCart = Cesium.Cartesian3.fromDegrees(${centerLng}, ${centerLat});
+      const east = new Cesium.Cartesian3(-Math.sin(headingRad), Math.cos(headingRad), 0);
+      const forward = new Cesium.Cartesian3(
+        -Math.cos(headingRad), -Math.sin(headingRad), 0
+      );
+
+      const targetCart = new Cesium.Cartesian3(
+        centerCart.x + forward.x * offset,
+        centerCart.y + forward.y * offset,
+        centerCart.z
+      );
+
       viewer.camera.lookAt(
-        center,
+        targetCart,
         new Cesium.HeadingPitchRange(
-          Cesium.Math.toRadians(heading),
-          Cesium.Math.toRadians(pitch),
+          headingRad,
+          pitchRad,
           distance
         )
       );
