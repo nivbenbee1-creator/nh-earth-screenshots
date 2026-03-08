@@ -1,5 +1,6 @@
 /**
- * NH Earth - Pin Edition (capture.js) - Bright + Red Pin
+ * NH Earth - Pin Edition (capture.js) 
+ * Correct Webhook: https://bennivbee.app.n8n.cloud/webhook/nh-google-earth
  */
 const { chromium } = require('playwright');
 const http = require('http');
@@ -9,7 +10,8 @@ const axios = require('axios');
 const FormData = require('form-data');
 
 const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxMy1hZjNkLTQzNjctYWFjYS04MzBjZDYwYjg2MjciLCJpZCI6MzkxNjE0LCJpYXQiOjE3NzE0MTE2NjJ9.14odwmn05mQ89bIEPBEzIAOia0I0AkwjD9oO--Gs4Zs';
-const WEBHOOK_URL = 'https://bennivbee.app.n8n.cloud/webhook/google-earth-nh'; 
+// ✅ הכתובת המעודכנת שלך
+const WEBHOOK_URL = 'https://bennivbee.app.n8n.cloud/webhook/nh-google-earth'; 
 
 const SHOTS = [
   { name: 'pin_front',   heading: 0,   pitch: -25 },
@@ -41,22 +43,21 @@ function buildHtml(lat, lng) {
       contextOptions: { webgl: { preserveDrawingBuffer: true, alpha: false } }
     });
     const scene = viewer.scene;
-    // ✅ פתרון חשיכה: ביטול תאורה לפי שעה (תמיד אור יום), השארת צללים על הקרקע
+    // ✅ ביטול Lighting כדי למנוע חשיכה (Daylight תמידי)
     scene.globe.enableLighting = false; 
     scene.highDynamicRange = true;     
     scene.fog.enabled = true;          
     scene.globe.showGroundAtmosphere = true; 
-    globe.maximumScreenSpaceError = 2.0;
     viewer.resolutionScale = 1.0;
 
     const pinEntity = viewer.entities.add({
       position: Cesium.Cartesian3.fromDegrees(${lng}, ${lat}),
       billboard: {
-        // ✅ פתרון פין אפור: אייקון פין אדום בולט (גוגל מפס)
-        image: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
+        // ✅ פין אדום בולט
+        image: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         width: 48, height: 48,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY // תמיד מעל הקרקע
+        disableDepthTestDistance: Number.POSITIVE_INFINITY
       }
     });
 
@@ -115,8 +116,10 @@ async function main() {
   
   try {
       await axios.post(WEBHOOK_URL, form, { headers: form.getHeaders() });
-      console.log('✅ הכל נשלח ל-n8n!');
-  } catch (e) { console.error('❌ שגיאת וובהוק:', e.message); }
+      console.log('✅ הכל נשלח לוובהוק המעודכן!');
+  } catch (e) {
+      console.error('❌ שגיאת וובהוק:', e.message);
+  }
 
   await browser.close();
   server.close();
