@@ -62,6 +62,10 @@ function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius) {
     Cesium.Ion.defaultAccessToken = '${CESIUM_TOKEN}';
 
     const viewer = new Cesium.Viewer('cesiumContainer', {
+      imageryProvider: new Cesium.UrlTemplateImageryProvider({
+        url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        maximumLevel: 20,
+      }),
       terrain: Cesium.Terrain.fromWorldTerrain(),
       animation: false, timeline: false, homeButton: false,
       sceneModePicker: false, baseLayerPicker: false,
@@ -85,7 +89,8 @@ function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius) {
     scene.highDynamicRange = false;
     scene.fog.enabled = false;
     globe.showGroundAtmosphere = false;
-    globe.maximumScreenSpaceError = 16.0;
+    globe.maximumScreenSpaceError = 2.0;   // ✅ איכות טובה
+    viewer.resolutionScale = 2.0;           // ✅ פי 2 ברזולוציה
     scene.light = new Cesium.DirectionalLight({
       direction: new Cesium.Cartesian3(1, 1, -1),
       intensity: 3.0,
@@ -106,9 +111,10 @@ function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius) {
       }
     });
 
-    // ✅ viewer.zoomTo עם range מחושב = מרכוז מושלם + מרחק נכון
+    // ✅ reset _ready + zoomTo + wait for tiles
     window.zoomToShot = async function(heading, pitch, isCinematic) {
       const range = isCinematic ? ${Math.round(radius * 6)} : ${Math.round(radius * 8)};
+      window._ready = false;  // ✅ reset לפני כל shot
       return new Promise((resolve) => {
         viewer.zoomTo(
           parcelEntity,
@@ -222,7 +228,13 @@ async function main() {
       return window.zoomToShot(heading, pitch, isCinematic);
     }, { heading: shot.heading, pitch: shot.pitch, isCinematic: shot.name.includes('cinematic') });
 
-    await page.waitForTimeout(3000);
+    // ✅ חכה שהtiles של הזווית החדשה יטענו
+    for (let i = 0; i < 20; i++) {
+      await page.waitForTimeout(500);
+      const ready = await page.evaluate(() => window._ready);
+      if (ready) break;
+    }
+    await page.waitForTimeout(1000);
 
     // ✅ viewer.render() לפני screenshot = אין תמונה שחורה
     await page.evaluate(() => window.forceRender());
