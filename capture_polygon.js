@@ -175,13 +175,14 @@ async function main() {
   }
   await page.waitForTimeout(23000);
 
-  for (const shot of SHOTS) {
+  for (const [index, shot] of SHOTS.entries()) {
     await page.evaluate(({ heading, pitch, isCinematic }) => {
       return window.zoomToShot(heading, pitch, isCinematic);
     }, { heading: shot.heading, pitch: shot.pitch, isCinematic: shot.name.includes('cinematic') });
 
-    // 4 שניות קבועות - פשוט ואמין, cache כבר מלא מהshot הקודם
-    await page.waitForTimeout(4000);
+    // shots ראשונות צריכות יותר זמן - cache עדיין קר
+    const waitTime = index < 3 ? 8000 : 4000;
+    await page.waitForTimeout(waitTime);
 
     await page.evaluate(() => window.forceRender());
     await page.waitForTimeout(500);
