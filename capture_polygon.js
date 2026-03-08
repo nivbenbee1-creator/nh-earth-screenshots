@@ -92,6 +92,7 @@ function buildHtml(cesiumCoords, extrudedHeight, radius) {
       }
     });
 
+    // ← מאפס _ready לפני כל zoom כדי לוודא שהטיילים נטענו מהזווית החדשה
     window.zoomToShot = function(heading, pitch, isCinematic) {
       const range = isCinematic ? ${distCinematic} : ${distStandard};
       window._ready = false;
@@ -168,32 +169,50 @@ async function main() {
 
   await page.goto('http://localhost:3000', { waitUntil: 'domcontentloaded', timeout: 60000 });
 
+  // המתנה ראשונית לטעינת עולם בסיסית
+  console.log('⏳ המתנה ראשונית לטעינת עולם...');
   for (let i = 0; i < 30; i++) {
     await page.waitForTimeout(1000);
     const ready = await page.evaluate(() => window._ready);
-    if (ready) { console.log(`Ready after ${i + 1}s`); break; }
+    if (ready) { console.log(`✅ עולם נטען אחרי ${i + 1}s`); break; }
   }
-  await page.waitForTimeout(23000);
+  await page.waitForTimeout(5000); // בטחון נוסף
 
+  // לולאת צילום - כל shot מחכה לטיילים מהזווית החדשה
   for (const [index, shot] of SHOTS.entries()) {
+    console.log(`\n🎯 [${index + 1}/${SHOTS.length}] ${shot.name}...`);
+
     await page.evaluate(({ heading, pitch, isCinematic }) => {
       return window.zoomToShot(heading, pitch, isCinematic);
     }, { heading: shot.heading, pitch: shot.pitch, isCinematic: shot.name.includes('cinematic') });
 
-    // shots ראשונות צריכות יותר זמן - cache עדיין קר
-    const waitTime = index < 3 ? 8000 : 4000;
-    await page.waitForTimeout(waitTime);
+    // ← חכה שהטיילים של הזווית החדשה ייטענו (עד 25 שניות)
+    let waited = 0;
+    while (waited < 25000) {
+      await page.waitForTimeout(1000);
+      waited += 1000;
+      const ready = await page.evaluate(() => window._ready);
+      if (ready) {
+        console.log(`   ✅ טיילים נטענו אחרי ${waited / 1000}s`);
+        break;
+      }
+    }
+    if (waited >= 25000) {
+      console.log(`   ⚠️ timeout - צולם בכל מקרה`);
+    }
 
+    // בטחון נוסף + force render לפני צילום
+    await page.waitForTimeout(2000);
     await page.evaluate(() => window.forceRender());
     await page.waitForTimeout(500);
 
     await page.screenshot({ path: path.join(outDir, `${shot.name}.png`), timeout: 60000 });
-    console.log(`📸 ${shot.name}.png`);
+    console.log(`   📸 ${shot.name}.png נשמר`);
   }
 
   await browser.close();
   server.close();
-  console.log('✅ Done!');
+  console.log('\n✅ Done! כל הצילומים הושלמו.');
 }
 
 main().catch(err => { console.error('FATAL:', err); process.exit(1); });
