@@ -105,7 +105,7 @@ function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius) {
 
     // ✅ reset _ready + zoomTo + wait for tiles
     window.zoomToShot = async function(heading, pitch, isCinematic) {
-      const range = isCinematic ? ${Math.round(radius * 4)} : ${Math.round(radius * 5)};
+      const range = isCinematic ? ${Math.round(radius * 3)} : ${Math.round(radius * 3.5)};
       window._ready = false;  // ✅ reset לפני כל shot
       return new Promise((resolve) => {
         viewer.zoomTo(
@@ -214,11 +214,14 @@ async function main() {
 
   // ✅ 8 זוויות עם zoomTo + forceRender
   console.log('[3] Capturing 8 shots...');
-  for (const shot of SHOTS) {
+  for (const [index, shot] of SHOTS.entries()) {
     // zoomTo עם auto-distance = centering מושלם
     await page.evaluate(({ heading, pitch, isCinematic }) => {
       return window.zoomToShot(heading, pitch, isCinematic);
     }, { heading: shot.heading, pitch: shot.pitch, isCinematic: shot.name.includes('cinematic') });
+
+    // ✅ shot ראשון ושני מחכים יותר
+    const extraWait = index === 0 ? 5000 : index === 1 ? 2000 : 0;
 
     // ✅ חכה שהtiles של הזווית החדשה יטענו
     for (let i = 0; i < 20; i++) {
@@ -226,7 +229,7 @@ async function main() {
       const ready = await page.evaluate(() => window._ready);
       if (ready) break;
     }
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1000 + extraWait);
 
     // ✅ viewer.render() לפני screenshot = אין תמונה שחורה
     await page.evaluate(() => window.forceRender());
