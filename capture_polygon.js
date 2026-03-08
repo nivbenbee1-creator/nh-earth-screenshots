@@ -173,7 +173,7 @@ async function main() {
     const ready = await page.evaluate(() => window._ready);
     if (ready) { console.log(`Ready after ${i + 1}s`); break; }
   }
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(23000);
 
   for (const shot of SHOTS) {
     await page.evaluate(({ heading, pitch, isCinematic }) => {
