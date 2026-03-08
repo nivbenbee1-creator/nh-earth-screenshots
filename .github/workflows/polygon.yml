@@ -37,9 +37,10 @@ jobs:
         run: |
           CMD='curl -X POST https://bennivbee.app.n8n.cloud/webhook/google-earth-nh'
           CMD="$CMD -F \"polygon=${POLYGON}\""
-          for f in ./screenshots_polygon/*.png; do
+          for f in ./screenshots_polygon/04_*.png ./screenshots_polygon/05_*.png ./screenshots_polygon/06_*.png ./screenshots_polygon/07_*.png ./screenshots_polygon/08_*.png; do
+            [ -f "$f" ] || continue
             FILENAME=$(basename "$f")
             CMD="$CMD -F \"${FILENAME}=@${f}\""
           done
-          echo "Sending polygon images..."
+          echo "Sending 5 best images..."
           eval $CMD
