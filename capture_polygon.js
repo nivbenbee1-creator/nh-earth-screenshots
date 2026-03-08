@@ -62,11 +62,6 @@ function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius) {
     Cesium.Ion.defaultAccessToken = '${CESIUM_TOKEN}';
 
     const viewer = new Cesium.Viewer('cesiumContainer', {
-      imageryProvider: new Cesium.UrlTemplateImageryProvider({
-        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        maximumLevel: 19,
-        credit: 'ESRI World Imagery',
-      }),
       terrain: Cesium.Terrain.fromWorldTerrain(),
       animation: false, timeline: false, homeButton: false,
       sceneModePicker: false, baseLayerPicker: false,
@@ -90,7 +85,7 @@ function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius) {
     scene.highDynamicRange = false;
     scene.fog.enabled = false;
     globe.showGroundAtmosphere = false;
-    globe.maximumScreenSpaceError = 2.0;   // ✅ איכות טובה
+    globe.maximumScreenSpaceError = 1.0;   // ✅ מקסימום איכות tiles
     viewer.resolutionScale = 2.0;           // ✅ פי 2 ברזולוציה
     scene.light = new Cesium.DirectionalLight({
       direction: new Cesium.Cartesian3(1, 1, -1),
