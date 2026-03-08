@@ -27,6 +27,5 @@ jobs:
           npm install
           npx playwright install chromium --with-deps
 
-      - name: Run Pin Capture
-        # הפעלה של הסקריפט החדש עם הנתונים מ-n8n
-        run: node capture_pin.js "${{ github.event.inputs.lat }}" "${{ github.event.inputs.lng }}"
+      - name: Run Capture
+        run: node capture.js "${{ github.event.inputs.lat }}" "${{ github.event.inputs.lng }}"
