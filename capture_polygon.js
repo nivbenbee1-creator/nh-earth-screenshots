@@ -105,7 +105,7 @@ function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius) {
 
     // ✅ reset _ready + zoomTo + wait for tiles
     window.zoomToShot = async function(heading, pitch, isCinematic) {
-      const range = isCinematic ? ${Math.round(radius * 6)} : ${Math.round(radius * 8)};
+      const range = isCinematic ? ${Math.round(radius * 4)} : ${Math.round(radius * 5)};
       window._ready = false;  // ✅ reset לפני כל shot
       return new Promise((resolve) => {
         viewer.zoomTo(
