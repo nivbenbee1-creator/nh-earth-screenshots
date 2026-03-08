@@ -1,35 +1,29 @@
 /**
- * NH Earth Polygon v10 - הגרסה המנצחת
- * 
- * פתרונות לפי המחקר:
- * 1. viewer.zoomTo + HeadingPitchRange(heading, pitch, undefined) = centering מושלם אוטומטי
- * 2. extrudedHeight = 0.2 * sqrt(area_m2) = פרופורציה לפי גודל החלקה
- * 3. alpha:false + viewer.render() לפני screenshot = אין תמונה שחורה
- * 4. _tileLoadQueue polling = סנכרון אמין
+ * NH Earth Polygon - Realistic Webhook Edition
+ * מבוסס על גרסה 10 עם שיפורי תאורה ושליחה אוטומטית
  */
 const { chromium } = require('playwright');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
 
 const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxMy1hZjNkLTQzNjctYWFjYS04MzBjZDYwYjg2MjciLCJpZCI6MzkxNjE0LCJpYXQiOjE3NzE0MTE2NjJ9.14odwmn05mQ89bIEPBEzIAOia0I0AkwjD9oO--Gs4Zs';
 
+// --- הגדרות וובהוק (שים כאן את הכתובת שלך) ---
+const WEBHOOK_URL = 'YOUR_WEBHOOK_URL'; 
+
 const SHOTS = [
-  { name: '01_standard_front',  heading: 0,   pitch: -25 },
-  { name: '02_standard_right',  heading: 90,  pitch: -25 },
-  { name: '03_standard_back',   heading: 180, pitch: -25 },
-  { name: '04_standard_left',   heading: 270, pitch: -25 },
-  { name: '05_cinematic_front', heading: 0,   pitch: -15 },
-  { name: '06_cinematic_right', heading: 90,  pitch: -15 },
-  { name: '07_cinematic_back',  heading: 180, pitch: -15 },
-  { name: '08_cinematic_left',  heading: 270, pitch: -15 },
+  { name: '01_front_realistic', heading: 0,   pitch: -25 },
+  { name: '02_side_realistic',  heading: 90,  pitch: -25 },
+  { name: '03_cinematic_low',   heading: 180, pitch: -15 }
 ];
 
 // חישוב שטח פוליגון במ"ר (Shoelace formula)
 function calcAreaM2(points) {
   let area = 0;
   const n = points.length;
-  const R = 6371000; // רדיוס כדור הארץ במטרים
+  const R = 6371000; 
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
     const lat1 = points[i].lat * Math.PI / 180;
@@ -41,208 +35,127 @@ function calcAreaM2(points) {
   return Math.abs(area * R * R / 2);
 }
 
-function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius) {
+// פונקציה לשליחת התמונה לוובהוק
+async function sendToWebhook(imagePath, name, coords) {
+    try {
+        const base64 = fs.readFileSync(imagePath, {encoding: 'base64'});
+        await axios.post(WEBHOOK_URL, {
+            event: "new_screenshot",
+            image_name: name,
+            coordinates: coords,
+            image_data: base64 
+        });
+        console.log(`✅ ${name} נשלח בהצלחה לוובהוק`);
+    } catch (e) {
+        console.error(`❌ שגיאה בשליחה לוובהוק: ${e.message}`);
+    }
+}
+
+function buildHtml(cesiumCoords, extrudedHeight, radius) {
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.124/Build/Cesium/Cesium.js"></script>
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.124/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
-  <style>
-    html, body, #cesiumContainer { width:100%; height:100%; margin:0; padding:0; overflow:hidden; }
-    .cesium-viewer-toolbar, .cesium-viewer-animationContainer,
-    .cesium-viewer-timelineContainer, .cesium-viewer-bottom,
-    .cesium-viewer-fullscreenContainer, .cesium-credit-logoContainer,
-    .cesium-credit-expand-link, .cesium-widget-credits { display:none !important; }
-  </style>
+  <style>html, body, #cesiumContainer { width:100%; height:100%; margin:0; padding:0; overflow:hidden; }</style>
 </head>
 <body>
   <div id="cesiumContainer"></div>
   <script>
     Cesium.Ion.defaultAccessToken = '${CESIUM_TOKEN}';
-
     const viewer = new Cesium.Viewer('cesiumContainer', {
       terrain: Cesium.Terrain.fromWorldTerrain(),
-      animation: false, timeline: false, homeButton: false,
-      sceneModePicker: false, baseLayerPicker: false,
-      navigationHelpButton: false, geocoder: false,
-      fullscreenButton: false, infoBox: false, selectionIndicator: false,
-      shadows: false,
-      requestRenderMode: false,
-      contextOptions: {
-        webgl: {
-          preserveDrawingBuffer: true,
-          alpha: false,  // ✅ חובה למנוע תמונה שחורה
-        }
-      },
+      shadows: true, 
+      animation: false, timeline: false, baseLayerPicker: false, infoBox: false,
+      contextOptions: { webgl: { preserveDrawingBuffer: true, alpha: false } }
     });
 
     const scene = viewer.scene;
-    const globe = scene.globe;
+    scene.globe.enableLighting = true; 
+    scene.highDynamicRange = true;     
+    scene.fog.enabled = true;          
+    scene.globe.showGroundAtmosphere = true; 
+    scene.globe.maximumScreenSpaceError = 1.5;
 
-    // ✅ תאורה אחידה
-    globe.enableLighting = false;
-    scene.highDynamicRange = false;
-    scene.fog.enabled = false;
-    globe.showGroundAtmosphere = false;
-    globe.maximumScreenSpaceError = 4.0;   // ✅ איזון איכות/מהירות
-    viewer.resolutionScale = 1.5;           // ✅ איכות סבירה בלי לקרוס
-    scene.light = new Cesium.DirectionalLight({
-      direction: new Cesium.Cartesian3(1, 1, -1),
-      intensity: 3.0,
-    });
-
-    // ✅ פוליגון על הקרקע - heightReference + extrudedHeightReference
-    const parcelEntity = viewer.entities.add({
+    const parcel = viewer.entities.add({
       polygon: {
         hierarchy: Cesium.Cartesian3.fromDegreesArray([${cesiumCoords}]),
         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
         extrudedHeight: ${extrudedHeight},
         extrudedHeightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-        perPositionHeight: false,
-        material: Cesium.Color.fromCssColorString('#22C55E').withAlpha(0.6),
+        material: Cesium.Color.fromCssColorString('#22C55E').withAlpha(0.5),
         outline: true,
-        outlineColor: Cesium.Color.fromCssColorString('#15803D'),
-        outlineWidth: 3,
+        outlineColor: Cesium.Color.WHITE, 
+        outlineWidth: 3
       }
     });
 
-    // ✅ reset _ready + zoomTo + wait for tiles
-    window.zoomToShot = async function(heading, pitch, isCinematic) {
-      const range = isCinematic ? ${Math.round(radius * 6)} : ${Math.round(radius * 8)};
-      window._ready = false;  // ✅ reset לפני כל shot
-      return new Promise((resolve) => {
-        viewer.zoomTo(
-          parcelEntity,
-          new Cesium.HeadingPitchRange(
-            Cesium.Math.toRadians(heading),
-            Cesium.Math.toRadians(pitch),
-            range
-          )
-        ).then(() => resolve());
-      });
+    window.zoomToShot = (h, p) => {
+      return viewer.zoomTo(parcel, new Cesium.HeadingPitchRange(
+        Cesium.Math.toRadians(h), Cesium.Math.toRadians(p), ${radius * 7.5}
+      ));
     };
 
-    // ✅ render מפורש לפני screenshot = אין תמונה שחורה
-    window.forceRender = function() {
-      viewer.render();
-    };
-
-    // ✅ זיהוי טעינה אמין
-    window._ready = false;
-    scene.postRender.addEventListener(function() {
-      if (window._ready) return;
-      const tilesLoaded = globe.tilesLoaded;
-      const queueEmpty = globe._surface && globe._surface._tileLoadQueue
-        ? globe._surface._tileLoadQueue.length === 0
-        : true;
-      if (tilesLoaded && queueEmpty) {
-        window._ready = true;
-        console.log('READY');
-      }
-    });
-
-    console.log('extrudedHeight=${extrudedHeight}');
+    window.isReady = () => viewer.scene.globe.tilesLoaded;
   </script>
 </body>
 </html>`;
 }
 
 async function main() {
-  const polygonInput = process.argv[2] || '30.4234154377576,-83.1261567366417|30.4234154395896,-83.1263946900247|30.4237866271808,-83.1263932673563|30.4237866253528,-83.1261553141869|30.4234154377576,-83.1261567366417';
+  const polygonInput = process.argv[2] || '30.423415,-83.126156,30.423415,-83.126394,30.423786,-83.126393,30.423786,-83.126155';
+  
+  const rawPoints = polygonInput.split(',');
+  const points = [];
+  for (let i = 0; i < rawPoints.length; i += 2) {
+    points.push({ lat: Number(rawPoints[i]), lng: Number(rawPoints[i+1]) });
+  }
 
-  const points = polygonInput.split('|').map(p => {
-    const [lat, lng] = p.split(',').map(Number);
-    return { lat, lng };
-  });
-
-  const centerLat = points.reduce((s, p) => s + p.lat, 0) / points.length;
-  const centerLng = points.reduce((s, p) => s + p.lng, 0) / points.length;
   const cesiumCoords = points.map(p => `${p.lng}, ${p.lat}`).join(', ');
-
-  // ✅ extrudedHeight = 0.2 * sqrt(area_m2) לפי המחקר
   const areaM2 = calcAreaM2(points);
   const extrudedHeight = Math.max(15, Math.min(200, Math.round(0.2 * Math.sqrt(areaM2))));
+  const radius = Math.sqrt(areaM2) / 2;
 
-  // radius מחושב מ-bounding box
-  const lats = points.map(p => p.lat);
-  const lngs = points.map(p => p.lng);
-  const latDiff = (Math.max(...lats) - Math.min(...lats)) * 111320;
-  const lngDiff = (Math.max(...lngs) - Math.min(...lngs)) * 111320 * Math.cos((Math.min(...lats) + Math.max(...lats)) / 2 * Math.PI / 180);
-  const radius = Math.max(100, Math.min(3000, Math.round(Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) / 2)));
+  const outDir = './screenshots';
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir);
 
-  const outDir = './screenshots_polygon';
-  fs.mkdirSync(outDir, { recursive: true });
-
-  console.log(`\n🏗️ NH Polygon Capture v10`);
-  console.log(`📍 Center: ${centerLat}, ${centerLng}`);
-  console.log(`📐 Area: ${Math.round(areaM2)}m² | extrudedHeight: ${extrudedHeight}m`);
-  console.log(`📸 8 screenshots\n`);
-
-  const html = buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius);
+  const html = buildHtml(cesiumCoords, extrudedHeight, radius);
   const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.writeHead(200, {'Content-Type': 'text/html'});
     res.end(html);
   });
-  await new Promise(resolve => server.listen(3000, resolve));
+  server.listen(3000);
 
-  const browser = await chromium.launch({
-    headless: true,
-    args: [
-      '--use-gl=swiftshader', '--enable-unsafe-swiftshader',
-      '--enable-webgl', '--enable-webgl2',
-      '--disable-dev-shm-usage', '--no-sandbox',
-      '--disable-setuid-sandbox', '--window-size=1920,1080',
-    ],
-  });
+  console.log(`🚀 מתחיל צילום פוליגון: שטח ${Math.round(areaM2)} מ"ר`);
 
-  const page = await (await browser.newContext({
-    viewport: { width: 1920, height: 1080 },
-    deviceScaleFactor: 1,
-  })).newPage();
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+  await page.goto('http://localhost:3000');
 
-  page.on('console', msg => console.log(`  [browser] ${msg.text()}`));
-
-  console.log('[1] Loading Cesium...');
-  await page.goto('http://localhost:3000', { waitUntil: 'domcontentloaded', timeout: 60000 });
-
-  // ✅ המתנה אמינה
-  console.log('[2] Waiting for tiles...');
-  for (let i = 0; i < 30; i++) {
-    await page.waitForTimeout(1000);
-    const ready = await page.evaluate(() => window._ready);
-    if (ready) { console.log(`    ✅ Ready after ${i + 1}s`); break; }
-    if (i === 59) console.log('    ⚠️ Timeout - continuing anyway');
-  }
-  await page.waitForTimeout(2000);
-
-  // ✅ 8 זוויות עם zoomTo + forceRender
-  console.log('[3] Capturing 8 shots...');
   for (const shot of SHOTS) {
-    // zoomTo עם auto-distance = centering מושלם
-    await page.evaluate(({ heading, pitch, isCinematic }) => {
-      return window.zoomToShot(heading, pitch, isCinematic);
-    }, { heading: shot.heading, pitch: shot.pitch, isCinematic: shot.name.includes('cinematic') });
-
-    // ✅ חכה שהtiles של הזווית החדשה יטענו
-    for (let i = 0; i < 20; i++) {
-      await page.waitForTimeout(500);
-      const ready = await page.evaluate(() => window._ready);
-      if (ready) break;
+    console.log(`📸 מכין את הזווית: ${shot.name}...`);
+    await page.evaluate((s) => window.zoomToShot(s.heading, s.pitch), shot);
+    
+    // המתנה לטעינת המפה
+    for(let i=0; i<30; i++) {
+        const ready = await page.evaluate(() => window.isReady());
+        if (ready) break;
+        await page.waitForTimeout(1000);
     }
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500); // ביטחון סופי לרינדור צללים
 
-    // ✅ viewer.render() לפני screenshot = אין תמונה שחורה
-    await page.evaluate(() => window.forceRender());
-    await page.waitForTimeout(500);
-
-    await page.screenshot({ path: path.join(outDir, `${shot.name}.png`) });
-    console.log(`    📸 ${shot.name}.png`);
+    const imgPath = path.join(outDir, `${shot.name}.png`);
+    await page.screenshot({ path: imgPath });
+    
+    // שליחה לוובהוק
+    await sendToWebhook(imgPath, shot.name, polygonInput);
   }
 
   await browser.close();
   server.close();
-  console.log(`\n✅ Done! 8 screenshots in ${outDir}/`);
+  console.log('🏁 הסתיים בהצלחה!');
+  process.exit(0);
 }
 
 main().catch(err => { console.error('FATAL:', err); process.exit(1); });
