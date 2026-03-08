@@ -85,8 +85,8 @@ function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius) {
     scene.highDynamicRange = false;
     scene.fog.enabled = false;
     globe.showGroundAtmosphere = false;
-    globe.maximumScreenSpaceError = 1.0;   // ✅ מקסימום איכות tiles
-    viewer.resolutionScale = 2.0;           // ✅ פי 2 ברזולוציה
+    globe.maximumScreenSpaceError = 4.0;   // ✅ איזון איכות/מהירות
+    viewer.resolutionScale = 1.5;           // ✅ איכות סבירה בלי לקרוס
     scene.light = new Cesium.DirectionalLight({
       direction: new Cesium.Cartesian3(1, 1, -1),
       intensity: 3.0,
@@ -208,7 +208,7 @@ async function main() {
 
   // ✅ המתנה אמינה
   console.log('[2] Waiting for tiles...');
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 30; i++) {
     await page.waitForTimeout(1000);
     const ready = await page.evaluate(() => window._ready);
     if (ready) { console.log(`    ✅ Ready after ${i + 1}s`); break; }
