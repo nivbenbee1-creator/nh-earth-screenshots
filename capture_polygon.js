@@ -6,14 +6,14 @@ const path = require('path');
 const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxMy1hZjNkLTQzNjctYWFjYS04MzBjZDYwYjg2MjciLCJpZCI6MzkxNjE0LCJpYXQiOjE3NzE0MTE2NjJ9.14odwmn05mQ89bIEPBEzIAOia0I0AkwjD9oO--Gs4Zs';
 
 const SHOTS = [
-  { name: '05_cinematic_front', heading: 0,   pitch: -15 },
-  { name: '06_cinematic_right', heading: 90,  pitch: -15 },
-  { name: '07_cinematic_back',  heading: 180, pitch: -15 },
-  { name: '08_cinematic_left',  heading: 270, pitch: -15 },
   { name: '01_standard_front',  heading: 0,   pitch: -25 },
   { name: '02_standard_right',  heading: 90,  pitch: -25 },
   { name: '03_standard_back',   heading: 180, pitch: -25 },
   { name: '04_standard_left',   heading: 270, pitch: -25 },
+  { name: '05_cinematic_front', heading: 0,   pitch: -15 },
+  { name: '06_cinematic_right', heading: 90,  pitch: -15 },
+  { name: '07_cinematic_back',  heading: 180, pitch: -15 },
+  { name: '08_cinematic_left',  heading: 270, pitch: -15 },
 ];
 
 function calcAreaM2(points) {
@@ -32,8 +32,8 @@ function calcAreaM2(points) {
 }
 
 function buildHtml(cesiumCoords, extrudedHeight, radius) {
-  const distStandard = Math.round(radius * 3.5);
-  const distCinematic = Math.round(radius * 3);
+  const distStandard = Math.round(radius * 5);
+  const distCinematic = Math.round(radius * 4);
   return `<!DOCTYPE html>
 <html>
 <head>
