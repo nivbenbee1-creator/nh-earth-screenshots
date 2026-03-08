@@ -15,6 +15,7 @@ const path = require('path');
 const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxMy1hZjNkLTQzNjctYWFjYS04MzBjZDYwYjg2MjciLCJpZCI6MzkxNjE0LCJpYXQiOjE3NzE0MTE2NjJ9.14odwmn05mQ89bIEPBEzIAOia0I0AkwjD9oO--Gs4Zs';
 
 const SHOTS = [
+  { name: '01_standard_front',  heading: 0,   pitch: -25 },
   { name: '02_standard_right',  heading: 90,  pitch: -25 },
   { name: '03_standard_back',   heading: 180, pitch: -25 },
   { name: '04_standard_left',   heading: 270, pitch: -25 },
