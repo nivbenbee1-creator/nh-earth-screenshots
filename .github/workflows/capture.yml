@@ -3,14 +3,10 @@ name: NH Earth Screenshots
 on:
   workflow_dispatch:
     inputs:
-      lat:
-        description: 'Latitude'
+      polygon:
+        description: 'Polygon Coordinates (Lat,Lng|Lat,Lng...)'
         required: true
-        default: '36.39989338'
-      lng:
-        description: 'Longitude'
-        required: true
-        default: '-105.57340046'
+        default: '36.2496,-91.7462|36.2498,-91.7462|36.2498,-91.7467|36.2496,-91.7467'
 
 jobs:
   capture:
@@ -31,18 +27,6 @@ jobs:
           npm install
           npx playwright install chromium --with-deps
 
-      - name: Capture screenshots
-        run: node capture.js "${{ inputs.lat }}" "${{ inputs.lng }}"
-
-      - name: Send all images to n8n
-        if: success()
-        run: |
-          CMD="curl -X POST https://bennivbee.app.n8n.cloud/webhook/nh-google-earth"
-          CMD="$CMD -F lat=${{ inputs.lat }}"
-          CMD="$CMD -F lng=${{ inputs.lng }}"
-          for f in ./screenshots/*.png; do
-            FILENAME=$(basename "$f")
-            CMD="$CMD -F $FILENAME=@$f"
-          done
-          echo "Sending all images..."
-          eval $CMD
+      - name: Capture polygon screenshots
+        # השלב הזה מריץ את הצילום ושולח אוטומטית ל-n8n כבינארי
+        run: node capture_polygon.js "${{ github.event.inputs.polygon }}"
