@@ -1,6 +1,6 @@
 /**
  * NH Earth - Pin Edition (capture.js) 
- * FINAL PRO: 9 Shots with "Warm-up" Strategy, Sending only 6 to n8n.
+ * Strategy: 7 total shots, sending the last 4 (Left, Custom 130, and 2 Tops).
  */
 const { chromium } = require('playwright');
 const http = require('http');
@@ -12,21 +12,15 @@ const FormData = require('form-data');
 const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxMy1hZjNkLTQzNjctYWFjYS04MzBjZDYwYjg2MjciLCJpZCI6MzkxNjE0LCJpYXQiOjE3NzE0MTE2NjJ9.14odwmn05mQ89bIEPBEzIAOia0I0AkwjD9oO--Gs4Zs';
 const WEBHOOK_URL = 'https://bennivbee.app.n8n.cloud/webhook/nh-google-earth'; 
 
-// ✅ הגדרת אסטרטגיית ה"חימום"
-const ALL_SHOTS = [
-  // --- 3 זוויות "חימום" (Warm-up) ---
-  // גיטהאב "ייכשל" בטעינה עליהן, אבל לפחות ה"חשובות" ייצאו טוב.
-  { name: 'warmup_45',    heading: 45,  pitch: -15, keep: false },
-  { name: 'warmup_135',   heading: 135, pitch: -15, keep: false },
-  { name: 'warmup_225',   heading: 225, pitch: -15, keep: false },
-  
-  // --- 6 הזוויות החשובות (מצולמות כשהשרת "חם") ---
-  { name: 'pin_front',   heading: 0,   pitch: -15, keep: true },
-  { name: 'pin_right',   heading: 90,  pitch: -15, keep: true },
-  { name: 'pin_back',    heading: 180, pitch: -15, keep: true },
-  { name: 'pin_left',    heading: 270, pitch: -15, keep: true },
-  { name: 'pin_top_0',   heading: 0,   pitch: -45, keep: true },
-  { name: 'pin_top_180', heading: 180, pitch: -45, keep: true }
+const SHOTS = [
+  { name: 'pin_front',       heading: 0,   pitch: -15, isHorizontal: true },
+  { name: 'pin_right',       heading: 90,  pitch: -15, isHorizontal: true },
+  { name: 'pin_back',        heading: 180, pitch: -15, isHorizontal: true },
+  // --- 4 התמונות הבאות הן אלו שיישלחו בפועל ---
+  { name: 'pin_left',        heading: 270, pitch: -15, isHorizontal: true },
+  { name: 'pin_custom_130',  heading: 40,  pitch: -15, isHorizontal: true }, // ✅ 130 מעלות מ-Left (270+130=40)
+  { name: 'pin_top_0',       heading: 0,   pitch: -45, isHorizontal: false },
+  { name: 'pin_top_180',     heading: 180, pitch: -45, isHorizontal: false }
 ];
 
 function buildHtml(lat, lng) {
@@ -50,7 +44,7 @@ function buildHtml(lat, lng) {
       contextOptions: { webgl: { preserveDrawingBuffer: true, alpha: false } }
     });
     const scene = viewer.scene;
-    scene.globe.enableLighting = false; // Daylight
+    scene.globe.enableLighting = false; 
     scene.highDynamicRange = true; 
     scene.globe.showGroundAtmosphere = false;
     scene.globe.maximumScreenSpaceError = 1.0; 
@@ -69,7 +63,7 @@ function buildHtml(lat, lng) {
     });
 
     window.zoomToShot = (h, p) => {
-        const range = p < -30 ? 600 : 750; // זום קרוב
+        const range = p < -30 ? 600 : 750; 
         return viewer.zoomTo(pinEntity, new Cesium.HeadingPitchRange(
             Cesium.Math.toRadians(h), Cesium.Math.toRadians(p), range
         ));
@@ -99,29 +93,32 @@ async function main() {
   await page.goto('http://localhost:3000');
   await page.waitForFunction(() => typeof window.zoomToShot === 'function');
 
-  // --- שלב הצילום: 9 תמונות ---
   const capturedFiles = [];
-  for (const shot of ALL_SHOTS) {
-    console.log(`📸 מצלם (${shot.keep ? 'חשוב' : 'חימום'}): ${shot.name}...`);
+  
+  for (let i = 0; i < SHOTS.length; i++) {
+    const shot = SHOTS[i];
+    console.log(`📸 מעבד: ${shot.name}...`);
+    
     await page.evaluate((s) => window.zoomToShot(s.heading, s.pitch), shot);
-    for(let i=0; i<30; i++) {
+    
+    for(let j=0; j<40; j++) {
         const ready = await page.evaluate(() => window.isReady());
         if (ready) break;
         await page.waitForTimeout(1000);
     }
-    await page.waitForTimeout(shot.keep ? 4000 : 2000); // המתנה ארוכה יותר ל"חשובות"
+    
+    const waitTime = shot.isHorizontal ? 5000 : 2000;
+    await page.waitForTimeout(waitTime); 
 
     const imgPath = path.join(outDir, `${shot.name}.png`);
     await page.screenshot({ path: imgPath });
-    
-    // מוסיף את התמונה לרשימה רק אם היא מסומנת כ"חשובה" (keep: true)
-    if (shot.keep) {
+
+    // ✅ לוגיקת הסינון: שולחים את 4 התמונות האחרונות
+    if (i >= SHOTS.length - 4) {
         capturedFiles.push(imgPath);
     }
   }
 
-  // --- שלב הסינון והשליחה: 6 תמונות בלבד ---
-  console.log('📤 שולח את 6 הזוויות ה"פגז" ל-n8n...');
   const form = new FormData();
   capturedFiles.forEach(f => form.append('files', fs.createReadStream(f)));
   form.append('lat', lat);
@@ -129,7 +126,7 @@ async function main() {
   
   try {
       await axios.post(WEBHOOK_URL, form, { headers: form.getHeaders() });
-      console.log('✅ נשלח בהצלחה!');
+      console.log(`✅ נשלחו בהצלחה ${capturedFiles.length} תמונות!`);
   } catch (e) { console.error('Error:', e.message); }
 
   await browser.close();
