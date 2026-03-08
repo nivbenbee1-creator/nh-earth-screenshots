@@ -1,20 +1,25 @@
+/**
+ * NH Earth Polygon v10 - Realistic + Binary Webhook (n8n)
+ */
 const { chromium } = require('playwright');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const FormData = require('form-data'); // ספרייה לשליחת קבצים בינאריים
+const FormData = require('form-data');
 
 const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxMy1hZjNkLTQzNjctYWFjYS04MzBjZDYwYjg2MjciLCJpZCI6MzkxNjE0LCJpYXQiOjE3NzE0MTE2NjJ9.14odwmn05mQ89bIEPBEzIAOia0I0AkwjD9oO--Gs4Zs';
-
-// --- הגדרות וובהוק ---
 const WEBHOOK_URL = 'https://bennivbee.app.n8n.cloud/webhook/google-earth-nh'; 
 
 const SHOTS = [
-  { name: 'front_view', heading: 0,   pitch: -25 },
-  { name: 'side_view',  heading: 90,  pitch: -25 },
-  { name: 'back_view',  heading: 180, pitch: -25 },
-  { name: 'cinematic',  heading: 45,  pitch: -15 }
+  { name: '01_standard_front',  heading: 0,   pitch: -25 },
+  { name: '02_standard_right',  heading: 90,  pitch: -25 },
+  { name: '03_standard_back',   heading: 180, pitch: -25 },
+  { name: '04_standard_left',   heading: 270, pitch: -25 },
+  { name: '05_cinematic_front', heading: 0,   pitch: -15 },
+  { name: '06_cinematic_right', heading: 90,  pitch: -15 },
+  { name: '07_cinematic_back',  heading: 180, pitch: -15 },
+  { name: '08_cinematic_left',  heading: 270, pitch: -15 },
 ];
 
 function calcAreaM2(points) {
@@ -32,29 +37,18 @@ function calcAreaM2(points) {
   return Math.abs(area * R * R / 2);
 }
 
-// פונקציה ששולחת את כל הקבצים יחד כבינארי ל-n8n
 async function sendAllToWebhook(imagePaths, coords) {
-    console.log('📤 שולח את כל התמונות כקבצים בינאריים ל-n8n...');
+    console.log('📤 שולח 8 תמונות כקבצים בינאריים ל-n8n...');
     const form = new FormData();
-    
-    // מוסיף כל תמונה כקובץ נפרד בתוך הטופס
-    imagePaths.forEach((filePath, index) => {
-        const fileName = path.basename(filePath);
-        form.append(`file_${index}`, fs.createReadStream(filePath), fileName);
+    imagePaths.forEach((filePath) => {
+        form.append('files', fs.createReadStream(filePath)); // שליחה כבינארי
     });
-
-    // מוסיף נתונים טקסטואליים
     form.append('coordinates', coords);
-    form.append('total_images', imagePaths.length.toString());
 
     try {
-        const response = await axios.post(WEBHOOK_URL, form, {
-            headers: { ...form.getHeaders() }
-        });
+        await axios.post(WEBHOOK_URL, form, { headers: { ...form.getHeaders() } });
         console.log('✅ הכל נשלח בהצלחה ל-n8n!');
-    } catch (e) {
-        console.error('❌ שגיאה בשליחה ל-n8n:', e.message);
-    }
+    } catch (e) { console.error('❌ שגיאה בשליחה לוובהוק:', e.message); }
 }
 
 function buildHtml(cesiumCoords, extrudedHeight, radius) {
@@ -71,11 +65,9 @@ function buildHtml(cesiumCoords, extrudedHeight, radius) {
     Cesium.Ion.defaultAccessToken = '${CESIUM_TOKEN}';
     const viewer = new Cesium.Viewer('cesiumContainer', {
       terrain: Cesium.Terrain.fromWorldTerrain(),
-      shadows: true, 
-      animation: false, timeline: false, baseLayerPicker: false, infoBox: false,
+      shadows: true, animation: false, timeline: false, baseLayerPicker: false, infoBox: false,
       contextOptions: { webgl: { preserveDrawingBuffer: true, alpha: false } }
     });
-
     const scene = viewer.scene;
     scene.globe.enableLighting = true; 
     scene.highDynamicRange = true;     
@@ -90,17 +82,11 @@ function buildHtml(cesiumCoords, extrudedHeight, radius) {
         extrudedHeight: ${extrudedHeight},
         extrudedHeightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
         material: Cesium.Color.fromCssColorString('#22C55E').withAlpha(0.5),
-        outline: true,
-        outlineColor: Cesium.Color.WHITE, 
-        outlineWidth: 3
+        outline: true, outlineColor: Cesium.Color.WHITE, outlineWidth: 3
       }
     });
 
-    window.zoomToShot = (h, p) => {
-      return viewer.zoomTo(parcel, new Cesium.HeadingPitchRange(
-        Cesium.Math.toRadians(h), Cesium.Math.toRadians(p), ${radius * 8}
-      ));
-    };
+    window.zoomToShot = (h, p, range) => viewer.zoomTo(parcel, new Cesium.HeadingPitchRange(Cesium.Math.toRadians(h), Cesium.Math.toRadians(p), range));
     window.isReady = () => viewer.scene.globe.tilesLoaded;
   </script>
 </body>
@@ -108,17 +94,15 @@ function buildHtml(cesiumCoords, extrudedHeight, radius) {
 }
 
 async function main() {
-  let polygonInput = process.argv[2] || '30.4234,-83.1261,30.4237,-83.1261';
+  let polygonInput = process.argv[2] || "";
   
-  // ✅ תיקון NaN: הופך | לפסיקים
+  // ✅ תיקון NaN שראינו בלוג שלך
   polygonInput = polygonInput.replace(/\|/g, ',');
   
   const rawPoints = polygonInput.split(',').map(s => s.trim());
   const points = [];
   for (let i = 0; i < rawPoints.length; i += 2) {
-    if (rawPoints[i] && rawPoints[i+1]) {
-        points.push({ lat: Number(rawPoints[i]), lng: Number(rawPoints[i+1]) });
-    }
+    if (rawPoints[i] && rawPoints[i+1]) points.push({ lat: Number(rawPoints[i]), lng: Number(rawPoints[i+1]) });
   }
 
   const cesiumCoords = points.map(p => `${p.lng}, ${p.lat}`).join(', ');
@@ -131,10 +115,7 @@ async function main() {
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir);
 
   const html = buildHtml(cesiumCoords, extrudedHeight, radius);
-  const server = http.createServer((req, res) => {
-    res.writeHead(200, {'Content-Type': 'text/html'});
-    res.end(html);
-  });
+  const server = http.createServer((req, res) => { res.writeHead(200, {'Content-Type': 'text/html'}); res.end(html); });
   server.listen(3000);
 
   const browser = await chromium.launch({ headless: true });
@@ -142,14 +123,14 @@ async function main() {
   await page.goto('http://localhost:3000');
 
   const capturedFiles = [];
-
   for (const shot of SHOTS) {
     console.log(`📸 מצלם: ${shot.name}...`);
-    await page.evaluate((s) => window.zoomToShot(s.heading, s.pitch), shot);
+    const range = shot.name.includes('cinematic') ? radius * 12 : radius * 16;
+    await page.evaluate((s) => window.zoomToShot(s.heading, s.pitch, ${range}), shot);
     
-    for(let i=0; i<30; i++) {
-        if (await page.evaluate(() => window.isReady())) break;
-        await page.waitForTimeout(1000);
+    for(let i=0; i<30; i++) { 
+        if (await page.evaluate(() => window.isReady())) break; 
+        await page.waitForTimeout(1000); 
     }
     await page.waitForTimeout(1000);
 
@@ -158,7 +139,7 @@ async function main() {
     capturedFiles.push(imgPath);
   }
 
-  // ✅ שליחה מרוכזת של הכל כבינארי בסוף
+  // שולח את כל ה-8 תמונות בבת אחת
   await sendAllToWebhook(capturedFiles, polygonInput);
 
   await browser.close();
