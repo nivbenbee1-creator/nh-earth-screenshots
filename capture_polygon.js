@@ -67,7 +67,7 @@ function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius) {
       sceneModePicker: false, baseLayerPicker: false,
       navigationHelpButton: false, geocoder: false,
       fullscreenButton: false, infoBox: false, selectionIndicator: false,
-      shadows: true,           // ✅ צללים אמיתיים
+      shadows: false,          // ❌ כבד מדי לSwiftShader
       requestRenderMode: false,
       contextOptions: {
         webgl: {
@@ -80,9 +80,9 @@ function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius) {
     const scene = viewer.scene;
     const globe = scene.globe;
 
-    // ✅ ריאליזם מקסימלי
+    // ✅ ריאליזם מקסימלי שעובד בheadless
     globe.enableLighting = true;          // ✅ שמש אמיתית
-    scene.highDynamicRange = true;        // ✅ עומק צבע HDR
+    scene.highDynamicRange = false;       // ❌ כבד מדי לSwiftShader
     scene.fog.enabled = true;             // ✅ ערפל מרחק
     globe.showGroundAtmosphere = true;    // ✅ אטמוספרה
     globe.maximumScreenSpaceError = 4.0;
@@ -232,7 +232,7 @@ async function main() {
     await page.evaluate(() => window.forceRender());
     await page.waitForTimeout(500);
 
-    await page.screenshot({ path: path.join(outDir, `${shot.name}.png`) });
+    await page.screenshot({ path: path.join(outDir, `${shot.name}.png`), timeout: 60000 });
     console.log(`    📸 ${shot.name}.png`);
   }
 
