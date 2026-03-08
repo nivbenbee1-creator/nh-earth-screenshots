@@ -1,6 +1,5 @@
 /**
- * NH Earth - Pin Edition (capture.js)
- * Realistic Visuals + Binary Webhook for n8n
+ * NH Earth - Pin Edition (capture.js) - Bright + Red Pin
  */
 const { chromium } = require('playwright');
 const http = require('http');
@@ -42,24 +41,27 @@ function buildHtml(lat, lng) {
       contextOptions: { webgl: { preserveDrawingBuffer: true, alpha: false } }
     });
     const scene = viewer.scene;
-    scene.globe.enableLighting = true; 
+    // ✅ פתרון חשיכה: ביטול תאורה לפי שעה (תמיד אור יום), השארת צללים על הקרקע
+    scene.globe.enableLighting = false; 
     scene.highDynamicRange = true;     
     scene.fog.enabled = true;          
     scene.globe.showGroundAtmosphere = true; 
+    globe.maximumScreenSpaceError = 2.0;
     viewer.resolutionScale = 1.0;
 
     const pinEntity = viewer.entities.add({
       position: Cesium.Cartesian3.fromDegrees(${lng}, ${lat}),
       billboard: {
-        image: 'https://cesium.com/downloads/cesiumjs/releases/1.124/Build/Cesium/Assets/Textures/pin.svg',
+        // ✅ פתרון פין אפור: אייקון פין אדום בולט (גוגל מפס)
+        image: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        width: 64, height: 64,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY
+        width: 48, height: 48,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY // תמיד מעל הקרקע
       }
     });
 
     window.zoomToShot = (h, p) => {
-        const range = p < -45 ? 400 : 700; // מרחק קבוע שנותן מבט פנורמי
+        const range = p < -45 ? 400 : 700;
         return viewer.zoomTo(pinEntity, new Cesium.HeadingPitchRange(
             Cesium.Math.toRadians(h), Cesium.Math.toRadians(p), range
         ));
