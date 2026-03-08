@@ -3,16 +3,18 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const FormData = require('form-data'); // ספרייה לשליחת קבצים בינאריים
 
 const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxMy1hZjNkLTQzNjctYWFjYS04MzBjZDYwYjg2MjciLCJpZCI6MzkxNjE0LCJpYXQiOjE3NzE0MTE2NjJ9.14odwmn05mQ89bIEPBEzIAOia0I0AkwjD9oO--Gs4Zs';
 
-// --- שים כאן את הכתובת שלך ---
+// --- הגדרות וובהוק ---
 const WEBHOOK_URL = 'https://bennivbee.app.n8n.cloud/webhook/google-earth-nh'; 
 
 const SHOTS = [
-  { name: '01_front_realistic', heading: 0,   pitch: -25 },
-  { name: '02_side_realistic',  heading: 90,  pitch: -25 },
-  { name: '03_cinematic_low',   heading: 180, pitch: -15 }
+  { name: 'front_view', heading: 0,   pitch: -25 },
+  { name: 'side_view',  heading: 90,  pitch: -25 },
+  { name: 'back_view',  heading: 180, pitch: -25 },
+  { name: 'cinematic',  heading: 45,  pitch: -15 }
 ];
 
 function calcAreaM2(points) {
@@ -30,16 +32,29 @@ function calcAreaM2(points) {
   return Math.abs(area * R * R / 2);
 }
 
-async function sendToWebhook(imagePath, name, coords) {
+// פונקציה ששולחת את כל הקבצים יחד כבינארי ל-n8n
+async function sendAllToWebhook(imagePaths, coords) {
+    console.log('📤 שולח את כל התמונות כקבצים בינאריים ל-n8n...');
+    const form = new FormData();
+    
+    // מוסיף כל תמונה כקובץ נפרד בתוך הטופס
+    imagePaths.forEach((filePath, index) => {
+        const fileName = path.basename(filePath);
+        form.append(`file_${index}`, fs.createReadStream(filePath), fileName);
+    });
+
+    // מוסיף נתונים טקסטואליים
+    form.append('coordinates', coords);
+    form.append('total_images', imagePaths.length.toString());
+
     try {
-        const base64 = fs.readFileSync(imagePath, {encoding: 'base64'});
-        await axios.post(WEBHOOK_URL, {
-            event: "new_screenshot",
-            image_name: name,
-            image_data: base64 
+        const response = await axios.post(WEBHOOK_URL, form, {
+            headers: { ...form.getHeaders() }
         });
-        console.log(`✅ ${name} נשלח לוובהוק`);
-    } catch (e) { console.error(`❌ שגיאת וובהוק: ${e.message}`); }
+        console.log('✅ הכל נשלח בהצלחה ל-n8n!');
+    } catch (e) {
+        console.error('❌ שגיאה בשליחה ל-n8n:', e.message);
+    }
 }
 
 function buildHtml(cesiumCoords, extrudedHeight, radius) {
@@ -60,6 +75,7 @@ function buildHtml(cesiumCoords, extrudedHeight, radius) {
       animation: false, timeline: false, baseLayerPicker: false, infoBox: false,
       contextOptions: { webgl: { preserveDrawingBuffer: true, alpha: false } }
     });
+
     const scene = viewer.scene;
     scene.globe.enableLighting = true; 
     scene.highDynamicRange = true;     
@@ -82,7 +98,7 @@ function buildHtml(cesiumCoords, extrudedHeight, radius) {
 
     window.zoomToShot = (h, p) => {
       return viewer.zoomTo(parcel, new Cesium.HeadingPitchRange(
-        Cesium.Math.toRadians(h), Cesium.Math.toRadians(p), ${radius * 7.5}
+        Cesium.Math.toRadians(h), Cesium.Math.toRadians(p), ${radius * 8}
       ));
     };
     window.isReady = () => viewer.scene.globe.tilesLoaded;
@@ -94,7 +110,7 @@ function buildHtml(cesiumCoords, extrudedHeight, radius) {
 async function main() {
   let polygonInput = process.argv[2] || '30.4234,-83.1261,30.4237,-83.1261';
   
-  // התיקון הקריטי: הופך את כל ה-| לפסיקים כדי שלא יצא NaN
+  // ✅ תיקון NaN: הופך | לפסיקים
   polygonInput = polygonInput.replace(/\|/g, ',');
   
   const rawPoints = polygonInput.split(',').map(s => s.trim());
@@ -107,15 +123,11 @@ async function main() {
 
   const cesiumCoords = points.map(p => `${p.lng}, ${p.lat}`).join(', ');
   const areaM2 = calcAreaM2(points);
-  
-  // אם השטח עדיין NaN (למקרה חירום), ניתן לו ערך דיפולטי
   const finalArea = isNaN(areaM2) ? 1000 : areaM2;
   const extrudedHeight = Math.max(15, Math.min(200, Math.round(0.2 * Math.sqrt(finalArea))));
   const radius = Math.sqrt(finalArea) / 2;
 
-  console.log(`🚀 שטח חלקה: ${Math.round(finalArea)} מ"ר. מתחיל צילום...`);
-
-  const outDir = './screenshots';
+  const outDir = path.join(__dirname, 'screenshots');
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir);
 
   const html = buildHtml(cesiumCoords, extrudedHeight, radius);
@@ -129,16 +141,25 @@ async function main() {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   await page.goto('http://localhost:3000');
 
+  const capturedFiles = [];
+
   for (const shot of SHOTS) {
+    console.log(`📸 מצלם: ${shot.name}...`);
     await page.evaluate((s) => window.zoomToShot(s.heading, s.pitch), shot);
+    
     for(let i=0; i<30; i++) {
         if (await page.evaluate(() => window.isReady())) break;
         await page.waitForTimeout(1000);
     }
+    await page.waitForTimeout(1000);
+
     const imgPath = path.join(outDir, `${shot.name}.png`);
     await page.screenshot({ path: imgPath });
-    await sendToWebhook(imgPath, shot.name, polygonInput);
+    capturedFiles.push(imgPath);
   }
+
+  // ✅ שליחה מרוכזת של הכל כבינארי בסוף
+  await sendAllToWebhook(capturedFiles, polygonInput);
 
   await browser.close();
   server.close();
