@@ -41,7 +41,7 @@ function calcAreaM2(points) {
   return Math.abs(area * R * R / 2);
 }
 
-function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight) {
+function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius) {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -106,20 +106,18 @@ function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight) {
       }
     });
 
-    // ✅ viewer.zoomTo עם HeadingPitchRange(heading, pitch, undefined)
-    // range=undefined = Cesium מחשב מרחק אוטומטי = centering מושלם
-    window.zoomToShot = async function(heading, pitch) {
+    // ✅ viewer.zoomTo עם range מחושב = מרכוז מושלם + מרחק נכון
+    window.zoomToShot = async function(heading, pitch, isCinematic) {
+      const range = isCinematic ? ${Math.round(radius * 6)} : ${Math.round(radius * 8)};
       return new Promise((resolve) => {
         viewer.zoomTo(
           parcelEntity,
           new Cesium.HeadingPitchRange(
             Cesium.Math.toRadians(heading),
             Cesium.Math.toRadians(pitch),
-            undefined  // ✅ auto-distance = centering מושלם
+            range
           )
-        ).then(() => {
-          resolve();
-        });
+        ).then(() => resolve());
       });
     };
 
@@ -164,6 +162,13 @@ async function main() {
   const areaM2 = calcAreaM2(points);
   const extrudedHeight = Math.max(15, Math.min(200, Math.round(0.2 * Math.sqrt(areaM2))));
 
+  // radius מחושב מ-bounding box
+  const lats = points.map(p => p.lat);
+  const lngs = points.map(p => p.lng);
+  const latDiff = (Math.max(...lats) - Math.min(...lats)) * 111320;
+  const lngDiff = (Math.max(...lngs) - Math.min(...lngs)) * 111320 * Math.cos((Math.min(...lats) + Math.max(...lats)) / 2 * Math.PI / 180);
+  const radius = Math.max(100, Math.min(3000, Math.round(Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) / 2)));
+
   const outDir = './screenshots_polygon';
   fs.mkdirSync(outDir, { recursive: true });
 
@@ -172,7 +177,7 @@ async function main() {
   console.log(`📐 Area: ${Math.round(areaM2)}m² | extrudedHeight: ${extrudedHeight}m`);
   console.log(`📸 8 screenshots\n`);
 
-  const html = buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight);
+  const html = buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius);
   const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(html);
@@ -213,9 +218,9 @@ async function main() {
   console.log('[3] Capturing 8 shots...');
   for (const shot of SHOTS) {
     // zoomTo עם auto-distance = centering מושלם
-    await page.evaluate(({ heading, pitch }) => {
-      return window.zoomToShot(heading, pitch);
-    }, { heading: shot.heading, pitch: shot.pitch });
+    await page.evaluate(({ heading, pitch, isCinematic }) => {
+      return window.zoomToShot(heading, pitch, isCinematic);
+    }, { heading: shot.heading, pitch: shot.pitch, isCinematic: shot.name.includes('cinematic') });
 
     await page.waitForTimeout(3000);
 
