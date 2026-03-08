@@ -63,8 +63,9 @@ function buildHtml(cesiumCoords, centerLat, centerLng, extrudedHeight, radius) {
 
     const viewer = new Cesium.Viewer('cesiumContainer', {
       imageryProvider: new Cesium.UrlTemplateImageryProvider({
-        url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-        maximumLevel: 20,
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        maximumLevel: 19,
+        credit: 'ESRI World Imagery',
       }),
       terrain: Cesium.Terrain.fromWorldTerrain(),
       animation: false, timeline: false, homeButton: false,
