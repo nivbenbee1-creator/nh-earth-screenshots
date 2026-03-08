@@ -180,12 +180,8 @@ async function main() {
       return window.zoomToShot(heading, pitch, isCinematic);
     }, { heading: shot.heading, pitch: shot.pitch, isCinematic: shot.name.includes('cinematic') });
 
-    for (let i = 0; i < 20; i++) {
-      await page.waitForTimeout(500);
-      const ready = await page.evaluate(() => window._ready);
-      if (ready) break;
-    }
-    await page.waitForTimeout(1000);
+    // 4 שניות קבועות - פשוט ואמין, cache כבר מלא מהshot הקודם
+    await page.waitForTimeout(4000);
 
     await page.evaluate(() => window.forceRender());
     await page.waitForTimeout(500);
