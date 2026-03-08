@@ -178,6 +178,38 @@ async function main() {
   }
   await page.waitForTimeout(5000); // בטחון נוסף
 
+  // ── WARMUP x3 ───────────────────────────────────────────────────────────
+  // SwiftShader (headless WebGL) צריך כמה frames לחימום לפני שמרנדר נכון.
+  // 3 צילומי "זריקה" מזוויות שונות - מחממים את pipeline הגרפי לעומק.
+  const WARMUPS = [
+    { heading: 45,  pitch: -20 },
+    { heading: 135, pitch: -20 },
+    { heading: 225, pitch: -20 },
+  ];
+
+  for (const [i, w] of WARMUPS.entries()) {
+    console.log(`\n🔥 Warmup ${i + 1}/3 (נזרק)...`);
+    await page.evaluate(({ heading, pitch }) => {
+      return window.zoomToShot(heading, pitch, false);
+    }, w);
+
+    for (let j = 0; j < 15; j++) {
+      await page.waitForTimeout(1000);
+      const ready = await page.evaluate(() => window._ready);
+      if (ready) break;
+    }
+    await page.waitForTimeout(3000);
+    await page.evaluate(() => window.forceRender());
+    await page.waitForTimeout(500);
+
+    const warmupPath = path.join(outDir, `_warmup_${i + 1}.png`);
+    await page.screenshot({ path: warmupPath });
+    fs.unlinkSync(warmupPath); // מחיקה מיידית
+    console.log(`   ✅ Warmup ${i + 1} הושלם`);
+  }
+  console.log('🔥 WebGL מחומם - מתחיל צילומים אמיתיים');
+  // ────────────────────────────────────────────────────────────────────────
+
   // לולאת צילום - כל shot מחכה לטיילים מהזווית החדשה
   for (const [index, shot] of SHOTS.entries()) {
     console.log(`\n🎯 [${index + 1}/${SHOTS.length}] ${shot.name}...`);
