@@ -1,118 +1,124 @@
 /**
- * NH Earth v19 - Based on v17 (working!) + crop for clean images
+ * NH Earth - Pin Edition (capture.js)
+ * Realistic Visuals + Binary Webhook for n8n
  */
 const { chromium } = require('playwright');
+const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
+const FormData = require('form-data');
 
-async function main() {
-  const lat = process.argv[2] || '36.39989338';
-  const lng = process.argv[3] || '-105.57340046';
-  const outDir = './screenshots';
-  fs.mkdirSync(outDir, { recursive: true });
+const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxMy1hZjNkLTQzNjctYWFjYS04MzBjZDYwYjg2MjciLCJpZCI6MzkxNjE0LCJpYXQiOjE3NzE0MTE2NjJ9.14odwmn05mQ89bIEPBEzIAOia0I0AkwjD9oO--Gs4Zs';
+const WEBHOOK_URL = 'https://bennivbee.app.n8n.cloud/webhook/google-earth-nh'; 
 
-  console.log(`\n🌍 NH Earth v19\n📍 ${lat}, ${lng}\n`);
+const SHOTS = [
+  { name: 'pin_front',   heading: 0,   pitch: -25 },
+  { name: 'pin_right',   heading: 90,  pitch: -25 },
+  { name: 'pin_back',    heading: 180, pitch: -25 },
+  { name: 'pin_left',    heading: 270, pitch: -25 },
+  { name: 'pin_top_0',   heading: 0,   pitch: -60 },
+  { name: 'pin_top_180', heading: 180, pitch: -60 }
+];
 
-  const browser = await chromium.launch({
-    headless: true,
-    args: [
-      '--use-gl=swiftshader', '--enable-unsafe-swiftshader',
-      '--enable-webgl', '--enable-webgl2',
-      '--disable-dev-shm-usage', '--no-sandbox',
-      '--disable-setuid-sandbox', '--window-size=1920,1080',
-    ],
-  });
+function buildHtml(lat, lng) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.124/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.124/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  <style>
+    html, body, #cesiumContainer { width:100%; height:100%; margin:0; padding:0; overflow:hidden; }
+    .cesium-viewer-toolbar, .cesium-credit-logoContainer, .cesium-viewer-bottom { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <script>
+    Cesium.Ion.defaultAccessToken = '${CESIUM_TOKEN}';
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      terrain: Cesium.Terrain.fromWorldTerrain(),
+      shadows: true, animation: false, timeline: false, baseLayerPicker: false, infoBox: false,
+      contextOptions: { webgl: { preserveDrawingBuffer: true, alpha: false } }
+    });
+    const scene = viewer.scene;
+    scene.globe.enableLighting = true; 
+    scene.highDynamicRange = true;     
+    scene.fog.enabled = true;          
+    scene.globe.showGroundAtmosphere = true; 
+    viewer.resolutionScale = 1.0;
 
-  const page = await (await browser.newContext({
-    viewport: { width: 1920, height: 1080 },
-    deviceScaleFactor: 1,
-  })).newPage();
+    const pinEntity = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(${lng}, ${lat}),
+      billboard: {
+        image: 'https://cesium.com/downloads/cesiumjs/releases/1.124/Build/Cesium/Assets/Textures/pin.svg',
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        width: 64, height: 64,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY
+      }
+    });
 
-  console.log(`[1] Opening...`);
-  await page.goto(`https://earth.google.com/web/search/${lat},${lng}`, {
-    waitUntil: 'domcontentloaded', timeout: 45000
-  });
-  console.log(`[2] Waiting 15s...`);
-  await page.waitForTimeout(15000);
-
-  // Dismiss banner
-  try {
-    const d = page.locator('text=Dismiss').first();
-    if (await d.isVisible({ timeout: 1000 })) await d.click();
-  } catch {}
-  await page.waitForTimeout(500);
-
-  // Close popup - same as v17
-  await page.mouse.click(100, 700);
-  await page.waitForTimeout(1000);
-
-  // Close info card on right side
-  try {
-    const closeBtn = page.locator('[aria-label="Close"]').first();
-    if (await closeBtn.isVisible({ timeout: 1000 })) await closeBtn.click();
-  } catch {}
-  await page.waitForTimeout(500);
-
-  // Crop: top 195px, left 80px, safe bottom/right
-  // Result: 1400x780 clean image
-  const crop = { x: 80, y: 195, width: 1400, height: 780 };
-
-  const cx = 960, cy = 540;
-
-  async function tilt(upPixels) {
-    await page.mouse.move(cx, cy);
-    await page.keyboard.down('Shift');
-    await page.mouse.down();
-    for (let i = 0; i <= 20; i++) {
-      await page.mouse.move(cx, cy - (upPixels * i / 20));
-      await page.waitForTimeout(30);
-    }
-    await page.mouse.up();
-    await page.keyboard.up('Shift');
-  }
-
-  async function rotate(rightPixels) {
-    await page.mouse.move(cx, cy);
-    await page.keyboard.down('Shift');
-    await page.mouse.down();
-    for (let i = 0; i <= 20; i++) {
-      await page.mouse.move(cx + (rightPixels * i / 20), cy);
-      await page.waitForTimeout(30);
-    }
-    await page.mouse.up();
-    await page.keyboard.up('Shift');
-  }
-
-  console.log(`[3] Tilting to horizon...`);
-  await tilt(450);
-  await page.waitForTimeout(2000);
-  await tilt(450);
-  await page.waitForTimeout(3000);
-
-  console.log(`[4] View 1: Front...`);
-  await page.screenshot({ path: path.join(outDir, '01_3d_front.png'), clip: crop });
-  console.log(`    ✅ 01_3d_front.png`);
-
-  console.log(`[5] View 2: Right...`);
-  await rotate(250);
-  await page.waitForTimeout(3000);
-  await page.screenshot({ path: path.join(outDir, '02_3d_right.png'), clip: crop });
-  console.log(`    ✅ 02_3d_right.png`);
-
-  console.log(`[6] View 3: Back...`);
-  await rotate(350);
-  await page.waitForTimeout(3000);
-  await page.screenshot({ path: path.join(outDir, '03_3d_back.png'), clip: crop });
-  console.log(`    ✅ 03_3d_back.png`);
-
-  console.log(`[7] View 4: Left...`);
-  await rotate(250);
-  await page.waitForTimeout(3000);
-  await page.screenshot({ path: path.join(outDir, '04_3d_left.png'), clip: crop });
-  console.log(`    ✅ 04_3d_left.png`);
-
-  await browser.close();
-  console.log(`\n✅ Done! 4 clean screenshots captured.`);
+    window.zoomToShot = (h, p) => {
+        const range = p < -45 ? 400 : 700; // מרחק קבוע שנותן מבט פנורמי
+        return viewer.zoomTo(pinEntity, new Cesium.HeadingPitchRange(
+            Cesium.Math.toRadians(h), Cesium.Math.toRadians(p), range
+        ));
+    };
+    window.isReady = () => viewer.scene.globe.tilesLoaded;
+  </script>
+</body>
+</html>`;
 }
 
-main().catch(err => { console.error('FATAL:', err); process.exit(1); });
+async function main() {
+  const lat = process.argv[2];
+  const lng = process.argv[3];
+
+  if (!lat || !lng) {
+      console.error("❌ Lat and Lng are required!");
+      process.exit(1);
+  }
+
+  const outDir = path.join(__dirname, 'screenshots');
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir);
+
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, {'Content-Type': 'text/html'});
+    res.end(buildHtml(lat, lng));
+  });
+  server.listen(3000);
+
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+  await page.goto('http://localhost:3000');
+
+  const capturedFiles = [];
+  for (const shot of SHOTS) {
+    console.log(`📸 מצלם נקודה: ${shot.name}...`);
+    await page.evaluate((s) => window.zoomToShot(s.heading, s.pitch), shot);
+    for(let i=0; i<30; i++) {
+        if (await page.evaluate(() => window.isReady())) break;
+        await page.waitForTimeout(1000);
+    }
+    await page.waitForTimeout(2000); 
+    const imgPath = path.join(outDir, `${shot.name}.png`);
+    await page.screenshot({ path: imgPath });
+    capturedFiles.push(imgPath);
+  }
+
+  const form = new FormData();
+  capturedFiles.forEach(f => form.append('files', fs.createReadStream(f)));
+  form.append('lat', lat);
+  form.append('lng', lng);
+  
+  try {
+      await axios.post(WEBHOOK_URL, form, { headers: form.getHeaders() });
+      console.log('✅ הכל נשלח ל-n8n!');
+  } catch (e) { console.error('❌ שגיאת וובהוק:', e.message); }
+
+  await browser.close();
+  server.close();
+  process.exit(0);
+}
+
+main().catch(err => { console.error(err); process.exit(1); });
