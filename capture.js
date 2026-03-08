@@ -1,6 +1,6 @@
 /**
  * NH Earth - Pin Edition (capture.js) 
- * Correct Webhook: https://bennivbee.app.n8n.cloud/webhook/nh-google-earth
+ * Realistic Daylight + Big Red Pin with White Outline
  */
 const { chromium } = require('playwright');
 const http = require('http');
@@ -10,7 +10,6 @@ const axios = require('axios');
 const FormData = require('form-data');
 
 const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MmEzODkxMy1hZjNkLTQzNjctYWFjYS04MzBjZDYwYjg2MjciLCJpZCI6MzkxNjE0LCJpYXQiOjE3NzE0MTE2NjJ9.14odwmn05mQ89bIEPBEzIAOia0I0AkwjD9oO--Gs4Zs';
-// ✅ הכתובת המעודכנת שלך
 const WEBHOOK_URL = 'https://bennivbee.app.n8n.cloud/webhook/nh-google-earth'; 
 
 const SHOTS = [
@@ -30,6 +29,7 @@ function buildHtml(lat, lng) {
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.124/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
   <style>
     html, body, #cesiumContainer { width:100%; height:100%; margin:0; padding:0; overflow:hidden; }
+    // הסרת ה-UI המקורי
     .cesium-viewer-toolbar, .cesium-credit-logoContainer, .cesium-viewer-bottom { display: none !important; }
   </style>
 </head>
@@ -43,21 +43,39 @@ function buildHtml(lat, lng) {
       contextOptions: { webgl: { preserveDrawingBuffer: true, alpha: false } }
     });
     const scene = viewer.scene;
-    // ✅ ביטול Lighting כדי למנוע חשיכה (Daylight תמידי)
-    scene.globe.enableLighting = false; 
-    scene.highDynamicRange = true;     
-    scene.fog.enabled = true;          
-    scene.globe.showGroundAtmosphere = true; 
+
+    // ✅ פתרון חשיכה: ריאליזם מואר (Daylight תמידי) + HDR חזק
+    scene.globe.enableLighting = false; // ביטול תאורה לפי שעה (תמיד אור יום)
+    scene.highDynamicRange = true;     // HDR
+    scene.fog.enabled = true;          // ערפל
+    
+    // הגדרת האטמוספירה לבהירות מלאה
+    scene.globe.showGroundAtmosphere = false; 
+    
+    // הגדלת החשיפה (HDR) כדי שהמפה תהיה בהירה יותר
+    scene.postProcessStages.bloom.enabled = false;
+    scene.postProcessStages.gammaCorrection.enabled = true;
+    scene.postProcessStages.colorCorrection.enabled = false; // ביטול גוון אפור
+    
     viewer.resolutionScale = 1.0;
 
     const pinEntity = viewer.entities.add({
       position: Cesium.Cartesian3.fromDegrees(${lng}, ${lat}),
       billboard: {
-        // ✅ פין אדום בולט
-        image: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
+        // ✅ פתרון פין מכוער/אפור: אייקון פין אדום בולט בגודל גדול
+        image: 'https://cesium.com/downloads/cesiumjs/releases/1.124/Build/Cesium/Assets/Textures/pin.svg',
+        color: Cesium.Color.RED, // צבע אדום מפורש
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        width: 48, height: 48,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY
+        width: 64, height: 64, // גודל גדול יותר
+        disableDepthTestDistance: Number.POSITIVE_INFINITY, // שהפין תמיד יהיה מעל הקרקע
+        
+        // אאוטליין לבן למראה Premium ובולט
+        outline: true,
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 5,
+        
+        // ✅ פתרון מיקום לא עקבי: הצבת הפין בדיוק על הקרקע
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
       }
     });
 
